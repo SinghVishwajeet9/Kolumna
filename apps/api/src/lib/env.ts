@@ -15,6 +15,5 @@ function required(name: string): string {
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
-  // Uncomment once DATABASE_URL exists (Day 2):
-  // databaseUrl: required("DATABASE_URL"),
+  databaseUrl: required("DATABASE_URL"),
 };
