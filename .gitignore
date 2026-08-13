@@ -38,3 +38,14 @@ Thumbs.db
 
 # prisma
 prisma/*.db
+
+# personal notes — not part of the project deliverable
+/learning stuff/
+/ARCHITECTURE.md
+/ROADMAP.md
+/CONCEPTS.md
+
+# Prisma CLI's bundled agent-skill reference docs — vendor content, not ours
+**/.agents/
+**/.claude/skills/
+**/.windsurf/
