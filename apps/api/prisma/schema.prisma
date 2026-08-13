@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  hashedPassword String
+  name           String
+  createdAt      DateTime @default(now())
+
+  sessions         Session[]
+  workspaceMembers WorkspaceMember[]
+  assignedCards    Card[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Workspace {
+  id        String            @id @default(cuid())
+  name      String
+  slug      String            @unique
+  createdAt DateTime          @default(now())
+  members   WorkspaceMember[]
+  boards    Board[]
+  labels    Label[]
+  lists     List[]
+  cards     Card[]
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Board {
+  id          String    @id @default(cuid())
+  workspaceId String
+  title       String
+  createdAt   DateTime  @default(now())
+  lists       List[]
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model List {
+  id          String    @id @default(cuid())
+  boardId     String
+  workspaceId String
+  title       String
+  rank        Float
+  createdAt   DateTime  @default(now())
+  cards       Card[]
+  board       Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+  @@index([workspaceId])
+}
+
+model Card {
+  id          String      @id @default(cuid())
+  listId      String
+  workspaceId String
+  title       String
+  rank        Float
+  description String?
+  dueDate     DateTime?
+  createdAt   DateTime    @default(now())
+  cardLabels  CardLabel[]
+  assigneeId  String?
+  assignee    User?       @relation(fields: [assigneeId], references: [id])
+  list        List        @relation(fields: [listId], references: [id], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([listId])
+  @@index([workspaceId])
+  @@index([assigneeId])
+}
+
+model Label {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String
+  createdAt   DateTime    @default(now())
+  cardLabels  CardLabel[]
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model CardLabel {
+  cardId  String
+  labelId String
+
+  card  Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, labelId])
+}
