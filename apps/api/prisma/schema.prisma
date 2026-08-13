@@ -25,7 +25,7 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String   @id
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
