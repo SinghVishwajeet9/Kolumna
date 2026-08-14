@@ -31,16 +31,3 @@ export async function requireWorkspaceMember(
     next(err);
   }
 }
-// 1. defensive check: if (!req.user) → 401 (shouldn't happen if requireAuth ran first, but don't assume)
-
-// 2. get workspaceId from req.params.workspaceId (the route will look like
-//    /workspaces/:workspaceId/boards)
-
-// 3. query WorkspaceMember: find one where userId = req.user.id AND workspaceId = that param
-//    (use findUnique against your @@unique([userId, workspaceId]) constraint —
-//    that's exactly the index Prisma needs for this lookup)
-
-// 4. if not found → 403 (they're logged in, just not allowed into THIS workspace)
-
-// 5. if found → build the TenantContext ({ workspaceId, userId }) and attach
-//    it as req.ctx, then next()
