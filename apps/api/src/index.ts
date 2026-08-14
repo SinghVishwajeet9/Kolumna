@@ -4,6 +4,7 @@ import express from "express";
 import type { HealthCheck } from "@kolumna/shared";
 import { env } from "./lib/env";
 import authRoutes from "./routes/auth.routes.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 
@@ -27,6 +28,9 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+
+// Must be registered LAST — after every route — see errorHandler.ts.
+app.use(errorHandler);
 
 // --- Start -------------------------------------------------------------
 

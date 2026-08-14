@@ -92,12 +92,11 @@ router.post("/logout", async (req, res) => {
   const token = req.cookies[SESSION_COOKIE_NAME];
 
   if (!token) {
-    // Already logged out — not an error, just a no-op that "succeeds."
     return res.status(200).json({ message: "Logged out" });
   }
 
-  await invalidateSession(token); // deletes the session row in Postgres
-  clearSessionCookie(res); // tells the browser to drop the cookie too
+  await invalidateSession(token);
+  clearSessionCookie(res);
 
   res.status(200).json({ message: "Logged out" });
 });
@@ -111,8 +110,6 @@ router.get("/me", async (req, res) => {
 
   const user = await validateSessionToken(token);
   if (!user) {
-    // Token was present but invalid/expired — same 401, no need to
-    // distinguish the reason to the client.
     return res.status(401).json({ error: "Not logged in" });
   }
 
