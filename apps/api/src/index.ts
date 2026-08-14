@@ -1,7 +1,9 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import type { HealthCheck } from "@kolumna/shared";
 import { env } from "./lib/env";
+import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
 
@@ -11,20 +13,20 @@ const app = express();
 app.use(
   cors({
     origin: env.corsOrigin,
-    credentials: true, // required for cookies once auth exists (Day 4)
+    credentials: true, // required for cookies — see CONCEPTS.md §2.7
   }),
 );
 app.use(express.json());
+app.use(cookieParser()); // populates req.cookies — needed to read the session cookie
 
 // --- Routes ----------------------------------------------------------------
-// Day 1: just prove the server boots and the shared package resolves.
-// Real routes (auth, boards, lists, cards) get their own files in
-// src/routes/ from Day 4 onward — see ARCHITECTURE.md §4.
 
 app.get("/health", (_req, res) => {
   const body: HealthCheck = { ok: true, service: "api" };
   res.json(body);
 });
+
+app.use("/auth", authRoutes);
 
 // --- Start -------------------------------------------------------------
 

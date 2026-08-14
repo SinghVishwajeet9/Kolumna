@@ -1,0 +1,56 @@
+### Signup — creates User + Workspace + WorkspaceMember(OWNER), sets session cookie.
+POST http://localhost:4000/auth/signup
+Content-Type: application/json
+
+{
+  "email": "test@kolumna.dev",
+  "password": "password123",
+  "name": "Test User"
+}
+
+### Same email again — expect 409
+POST http://localhost:4000/auth/signup
+Content-Type: application/json
+
+{
+  "email": "test@kolumna.dev",
+  "password": "password123",
+  "name": "Test User"
+}
+
+### Bad email — expect 400
+POST http://localhost:4000/auth/signup
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "password": "password123",
+  "name": "Test User"
+}
+
+### Who am I — run this right after signup, VS Code REST Client reuses cookies per file
+GET http://localhost:4000/auth/me
+
+### Logout
+POST http://localhost:4000/auth/logout
+
+### Me again — expect 401 now
+GET http://localhost:4000/auth/me
+
+### Login
+POST http://localhost:4000/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@kolumna.dev",
+  "password": "password123"
+}
+
+### Wrong password — expect 401, generic message
+POST http://localhost:4000/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@kolumna.dev",
+  "password": "wrongpassword"
+}
