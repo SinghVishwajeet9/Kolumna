@@ -5,6 +5,8 @@ import type { HealthCheck } from "@kolumna/shared";
 import { env } from "./lib/env";
 import authRoutes from "./routes/auth.routes.js";
 import workspaceRoutes from "./routes/workspace.routes.js";
+import boardRoutes from "./routes/board.routes.js";
+import listRoutes from "./routes/list.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -30,6 +32,10 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/workspaces", workspaceRoutes);
+// board/list routes already contain full paths (e.g. /workspaces/:id/boards,
+// /boards/:id) internally — mounted at root so those paths aren't doubled.
+app.use(boardRoutes);
+app.use(listRoutes);
 
 // Must be registered LAST — after every route — see errorHandler.ts.
 app.use(errorHandler);
