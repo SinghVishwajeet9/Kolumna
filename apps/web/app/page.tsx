@@ -1,6 +1,3 @@
-// Day 1 placeholder. Proves: Next.js boots, Tailwind classes apply, and a
-// fetch to the Express API succeeds across origins. Gets replaced with the
-// real signup/login flow on Day 8 — see ROADMAP.md.
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,10 +8,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("http://localhost:4000/health")
+    fetch("http://localhost:4100/health")
       .then((res) => res.json())
       .then((data: HealthCheck) => setHealth(data))
-      .catch(() => setError("Could not reach the API. Is it running (bun run dev:api)?"));
+      .catch(() =>
+        setError("Could not reach the API. Is it running (bun run dev:api)?"),
+      );
   }, []);
 
   return (
@@ -22,7 +21,9 @@ export default function Home() {
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Kolumna
       </h1>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">Day 1: web ↔ api wiring check</p>
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Day 1: web ↔ api wiring check
+      </p>
 
       {health && (
         <p className="rounded-md bg-green-100 px-3 py-1 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
