@@ -1,26 +1,174 @@
 @import "tailwindcss";
 
+/* General Sans is loaded via <link> in app/layout.tsx — it can't be
+   @import-ed here, because Tailwind's own import expands above this point
+   and CSS requires every @import to come first in the file. */
+
+@theme {
+  /* Surfaces — #0d0d0d base, each step up is a lift, not a new hue */
+  --color-bg: #0d0d0d;
+  --color-surface: #131313;
+  --color-surface-2: #191919;
+  --color-line: #272727;
+  --color-line-soft: #1f1f1f;
+  /* Deliberately brighter than the rest. Used only for things that need to
+     read as floating ABOVE the page — dropdowns, popovers. */
+  --color-line-bright: #454545;
+
+  /* Text — muted/faint sit much closer to white than a typical grey ramp.
+     On a #0d0d0d ground a mid-grey reads as murky rather than "secondary",
+     so these lean light and carry only a hint of grey. */
+  --color-fg: #f4f4f4;
+  --color-muted: #c9c9c9;
+  --color-faint: #9a9a9a;
+
+  /* One accent, doing all the work */
+  --color-accent: #5af7b3;
+  --color-accent-dim: #2f6b53;
+
+  --font-sans: "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* The page is 16 columns wide. This single value drives the grid cell
+     size AND the page's side padding, so the margin is always exactly one
+     grid cell and the frame edges always land on grid lines. */
+  --column-size: calc(100vw / 16);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The grid-line field behind hero/section blocks — Render uses this to give
+   dark space structure without adding another color. */
+/* Square cells one column wide. This sits BEHIND the content blocks, which
+   are opaque — so the grid is only ever visible in the page margins and in
+   the gaps between blocks, never behind text. */
+@utility grid-field {
+  background-image:
+    linear-gradient(90deg, var(--color-line) 1px, transparent 0),
+    repeating-linear-gradient(
+      var(--color-line),
+      var(--color-line) 1px,
+      transparent 0,
+      transparent var(--column-size)
+    );
+  /* The X size is calc(100% / 16), NOT var(--column-size). The variable is
+     based on 100vw, which includes the scrollbar — but this background is
+     painted across the element's real width, which doesn't. Using vw here
+     puts the columns slightly out of step, so the left edge lands on a grid
+     line and the right edge misses by the scrollbar width. A percentage
+     resolves against the actual painted width, so both edges land exactly. */
+  background-size:
+    calc(100% / 16) 100%,
+    100% 100%;
+  background-position: 0 0;
+}
+
+/* Gooey hover fill. Three circles sit below the button and rise into it on
+   hover, merged by the #goo SVG filter (see GooFilter.tsx).
+
+   Note the layering: the original effect puts the blobs at z-index -1 behind
+   a TRANSPARENT button. These buttons have a solid white background, which
+   would hide them there — so instead the blobs sit above the background
+   (painted by the element itself) and the label is lifted above the blobs. */
+.goo {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.goo__blobs {
+  position: absolute;
+  inset: 0;
+  filter: url(#goo);
+  pointer-events: none;
+}
+
+.goo__blobs span {
+  position: absolute;
+  top: 0;
+  width: 34%;
+  height: 100%;
+  border-radius: 100%;
+  background: var(--color-accent);
+  transform: scale(1.4) translateY(125%) translateZ(0);
+  transition: transform 700ms ease;
+}
+
+.goo__blobs span:nth-child(1) {
+  left: -5%;
+}
+.goo__blobs span:nth-child(2) {
+  left: 30%;
+  transition-delay: 60ms;
+}
+.goo__blobs span:nth-child(3) {
+  left: 66%;
+  transition-delay: 25ms;
+}
+
+.goo:hover .goo__blobs span,
+.goo:focus-visible .goo__blobs span {
+  transform: scale(1.4) translateY(0) translateZ(0);
+}
+
+/* Sits above the blobs so the text stays readable as they rise. */
+.goo__label {
+  position: relative;
+  z-index: 1;
+  transition: color 250ms ease 200ms;
+}
+
+/* White variant, for the outlined button. Its label is white at rest, so it
+   would disappear against white blobs — the text flips to the dark ground
+   colour instead, delayed slightly so it changes as the blobs arrive rather
+   than before them. */
+.goo--white .goo__blobs span {
+  background: #ffffff;
+}
+
+.goo--white:hover .goo__label,
+.goo--white:focus-visible .goo__label {
+  color: var(--color-bg);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* `forwards`, not `both`. With `both` the element also adopts the FROM
+   frame before the animation starts — so if the animation never runs (a
+   throttled background tab, say), it stays stuck at opacity 0 and is
+   invisible. With `forwards` the element's normal state is visible and the
+   animation is pure polish on top. Bad failure mode vs. harmless one. */
+@utility animate-rise {
+  animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Respect users who've asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

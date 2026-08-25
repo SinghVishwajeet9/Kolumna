@@ -1,43 +1,66 @@
-"use client";
+import { Nav } from "@/components/marketing/Nav";
+import { Hero } from "@/components/marketing/Hero";
+import { Steps } from "@/components/marketing/Steps";
+import { Breadth } from "@/components/marketing/Breadth";
+import { Features } from "@/components/marketing/Features";
+import { StatusBoard } from "@/components/marketing/StatusBoard";
+import { AISection } from "@/components/marketing/AISection";
+import { CTA } from "@/components/marketing/CTA";
+import { Footer } from "@/components/marketing/Footer";
+import { GooFilter } from "@/components/marketing/GooFilter";
 
-import { useEffect, useState } from "react";
-import type { HealthCheck } from "@kolumna/shared";
+// Each framed section is its own bordered, OPAQUE block. The grid lives on
+// the page wrapper behind them, so it shows only in the one-column side
+// margins and in the gaps between blocks — never behind content.
+function Block({ children }: { children: React.ReactNode }) {
+  return <div className="border border-line bg-bg">{children}</div>;
+}
 
-export default function Home() {
-  const [health, setHealth] = useState<HealthCheck | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("http://localhost:4100/health")
-      .then((res) => res.json())
-      .then((data: HealthCheck) => setHealth(data))
-      .catch(() =>
-        setError("Could not reach the API. Is it running (bun run dev:api)?"),
-      );
-  }, []);
-
+export default function LandingPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-50 dark:bg-black">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Kolumna
-      </h1>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        Day 1: web ↔ api wiring check
-      </p>
+    // id="top" is the scroll target for the footer's logo tile.
+    <div id="top" className="grid-field">
+      {/* Defines filter#goo, referenced by every gooey button on the page. */}
+      <GooFilter />
+      <Nav />
 
-      {health && (
-        <p className="rounded-md bg-green-100 px-3 py-1 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
-          API says: {JSON.stringify(health)}
-        </p>
-      )}
-      {error && (
-        <p className="rounded-md bg-red-100 px-3 py-1 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
-      {!health && !error && (
-        <p className="text-sm text-zinc-400">Checking API…</p>
-      )}
-    </main>
+      <main>
+        {/* Full-bleed: no frame, no side margins, no grid around it. The
+            framed grid only begins at the sections below. */}
+        <Hero />
+
+        {/* Side padding is calc(100%/16), matching the grid's
+            background-size, so each block's left AND right edge lands on a
+            grid line. (A percentage resolves against the containing block's
+            width — the same width the grid is painted across. Using
+            100vw here would drift by the scrollbar width.) */}
+        <div className="flex flex-col gap-[var(--column-size)] px-6 pt-[var(--column-size)] lg:px-[calc(100%/16)]">
+          <Block>
+            <Steps />
+          </Block>
+          <Block>
+            <Breadth />
+          </Block>
+          <Block>
+            <Features />
+          </Block>
+          <Block>
+            <StatusBoard />
+          </Block>
+          <Block>
+            <AISection />
+          </Block>
+          <Block>
+            <CTA />
+          </Block>
+        </div>
+      </main>
+
+      {/* Full-bleed like the hero — the giant wordmark needs the whole
+          width, so no frame and no side margins here. */}
+      <div className="mt-[var(--column-size)]">
+        <Footer />
+      </div>
+    </div>
   );
 }

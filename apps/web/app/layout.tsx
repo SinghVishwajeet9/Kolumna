@@ -1,35 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
-import { Header } from "@/components/Header";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
-  title: "Kolumna",
+  title: "Kolumna — Structure for your team's chaos",
   description: "A multi-tenant, AI-assisted project board.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <Header />
-          {children}
-        </AuthProvider>
+    <html lang="en" className="h-full antialiased">
+      <head>
+        {/* General Sans — free stand-in for Roobert (which is commercial). */}
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link
+          href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-full">
+        {/* Header lives in (app)/layout.tsx now — marketing pages have their
+            own nav, so the app chrome shouldn't leak onto the landing page. */}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
