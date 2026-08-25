@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import workspaceRoutes from "./routes/workspace.routes.js";
 import boardRoutes from "./routes/board.routes.js";
 import listRoutes from "./routes/list.routes.js";
+import cardRoutes from "./routes/card.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -36,6 +37,7 @@ app.use("/workspaces", workspaceRoutes);
 // /boards/:id) internally — mounted at root so those paths aren't doubled.
 app.use(boardRoutes);
 app.use(listRoutes);
+app.use(cardRoutes);
 
 // Must be registered LAST — after every route — see errorHandler.ts.
 app.use(errorHandler);
