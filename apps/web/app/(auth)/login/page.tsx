@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -10,15 +11,21 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const { user, loading, refreshUser } = useAuth();
+
+  // Already logged in? Don't show a login form — bounce home.
+  useEffect(() => {
+    if (!loading && user) {
+      router.push("/");
+    }
+  }, [loading, user, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      const response = await api.post("/auth/login", {
-        email,
-        password,
-      });
+      await api.post("/auth/login", { email, password });
+      await refreshUser(); // tell the shared auth state a login just happened
       router.push("/");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -28,6 +35,7 @@ export default function LoginPage() {
       }
     }
   }
+
   return (
     <main>
       <h1>Sign in</h1>
