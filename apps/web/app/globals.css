@@ -7,8 +7,10 @@
 @theme {
   /* Surfaces — #0d0d0d base, each step up is a lift, not a new hue */
   --color-bg: #0d0d0d;
-  --color-surface: #131313;
-  --color-surface-2: #191919;
+  /* Darkened: these sit closer to the page ground now, so panels and cards
+     read as deep surfaces rather than mid-grey blocks. */
+  --color-surface: #0f0f0f;
+  --color-surface-2: #141414;
   --color-line: #272727;
   --color-line-soft: #1f1f1f;
   /* Deliberately brighter than the rest. Used only for things that need to

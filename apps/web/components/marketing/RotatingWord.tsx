@@ -1,26 +1,22 @@
-"use client";
-
-import { useEffect, useState } from "react";
-
-const words = ["chaos", "sprints", "backlog", "roadmap", "ideas"];
-
+// No longer cycles — a single static word, textured with a dot grid and
+// clipped to the letterforms so it reads as the same pixelated/dithered
+// material as the shader elsewhere on the page, rather than a flat fill.
 export function RotatingWord() {
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setIndex((i) => (i + 1) % words.length);
-    }, 2200);
-    return () => clearInterval(id);
-  }, []);
-
   return (
-    <span className="text-accent">
-      <span key={index} className="inline-block animate-rise">
-        {words[index]}
+    <span className="relative inline-block">
+      <span
+        className="inline-block animate-rise"
+        style={{
+          backgroundImage:
+            "radial-gradient(var(--color-accent) 1.4px, transparent 1.6px)",
+          backgroundSize: "4px 4px",
+          backgroundClip: "text",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+        }}
+      >
+        chaos
       </span>
-      {/* Blinking block cursor — echoes the logo's bar shape */}
-      <span className="ml-1.5 inline-block h-[0.72em] w-[0.42em] translate-y-[0.02em] animate-pulse bg-accent align-baseline" />
     </span>
   );
 }

@@ -52,8 +52,12 @@ export function Breadth() {
             </div>
           </div>
 
-          {/* Right: one feature, with a visual */}
-          <div className="p-8 md:p-12">
+          {/* Right: one feature, with a visual.
+              overflow-hidden because the grid backdrop below bleeds 40px
+              past the card on every side — without clipping here that bleed
+              escapes the panel on narrow screens and gives the whole page a
+              horizontal scrollbar. */}
+          <div className="overflow-hidden p-8 md:p-12">
             <h3 className="mb-4 max-w-[18ch] text-[clamp(1.5rem,2.6vw,2rem)] font-medium leading-[1.15] tracking-[-0.02em]">
               Live on every screen watching the board
             </h3>
@@ -68,8 +72,41 @@ export function Breadth() {
               See what else it does →
             </a>
 
-            <div className="border border-line-soft bg-surface">
-              <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
+            {/* Fine green grid bleeding out past the card on every side,
+                radially masked so it fades before it reaches the panel edge.
+                The card itself is opaque, so the grid only shows in the
+                margin around it — which is what makes the card read as
+                floating above a surface rather than sitting on flat black. */}
+            <div className="relative">
+              {/* Green wash sitting under the grid, so the whole area reads
+                  as tinted rather than just having green lines drawn on
+                  black. Blurred and low-opacity — it's a glow, not a shape. */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-10"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 60% 55% at 50% 50%, rgba(90,247,179,0.14), transparent 72%)",
+                  filter: "blur(14px)",
+                }}
+              />
+
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-10"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, rgba(90,247,179,0.26) 1px, transparent 0), linear-gradient(rgba(90,247,179,0.26) 1px, transparent 0)",
+                  backgroundSize: "24px 24px",
+                  maskImage:
+                    "radial-gradient(ellipse 68% 62% at 50% 50%, black 35%, transparent 78%)",
+                  WebkitMaskImage:
+                    "radial-gradient(ellipse 68% 62% at 50% 50%, black 35%, transparent 78%)",
+                }}
+              />
+
+              <div className="relative border border-line-soft bg-surface">
+                <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
                 <span className="flex -space-x-1.5">
                   {["bg-[#5af7b3]", "bg-[#7dd3fc]", "bg-[#c4b5fd]"].map((tone, i) => (
                     <span
@@ -100,6 +137,7 @@ export function Breadth() {
                     <span className="truncate text-muted">{row.card}</span>
                   </div>
                 ))}
+              </div>
               </div>
             </div>
           </div>

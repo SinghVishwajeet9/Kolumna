@@ -1,3 +1,63 @@
+// Small squares sitting on the corners of a bordered region — the
+// registration/crop-mark device that gives technical-drawing UIs their
+// "spec sheet" feel. Purely decorative; the parent needs `relative`.
+function CornerMarks({ accent = false }: { accent?: boolean }) {
+  // Hollow, not solid — an outlined square with the page colour showing
+  // through, so it reads as a registration mark punched over the border
+  // rather than a dot sitting on it.
+  const tone = accent ? "border-accent" : "border-faint";
+  return (
+    <>
+      {[
+        "-left-[7px] -top-[7px]",
+        "-right-[7px] -top-[7px]",
+        "-left-[7px] -bottom-[7px]",
+        "-right-[7px] -bottom-[7px]",
+      ].map((pos) => (
+        <span
+          key={pos}
+          aria-hidden="true"
+          className={`pointer-events-none absolute h-[13px] w-[13px] border bg-bg ${tone} ${pos}`}
+          style={{ borderRadius: "3px" }}
+        />
+      ))}
+    </>
+  );
+}
+
+// Big value, small caption — the unit that carries the visual weight in a
+// spec panel. Every figure here is a real property of the system, not a
+// marketing number.
+function Stat({
+  value,
+  caption,
+  accent = false,
+}: {
+  value: string;
+  caption: string;
+  accent?: boolean;
+}) {
+  return (
+    // Dashed border and a real fill — a solid hairline with a near-invisible
+    // tint read as an empty outline rather than a filled plate.
+    <div
+      className={`border border-dashed p-7 ${
+        accent ? "border-accent/50 bg-accent/[0.10]" : "border-faint/50 bg-white/[0.035]"
+      }`}
+      style={{ borderRadius: "8px" }}
+    >
+      <p
+        className={`text-[30px] font-medium leading-none tracking-[-0.02em] ${
+          accent ? "text-accent" : "text-fg"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-3 text-[15px] text-muted">{caption}</p>
+    </div>
+  );
+}
+
 export function Features() {
   return (
     <section id="product" className="bg-bg">
@@ -9,56 +69,81 @@ export function Features() {
           The boring parts done properly — so the interesting parts stay fast.
         </p>
 
-        <div className="grid gap-px bg-line-soft md:grid-cols-3">
-          {/* Wide cell */}
-          <div className="bg-bg p-8 md:col-span-2">
-            <h3 className="mb-3 text-[20px] font-medium">Isolated by default</h3>
-            <p className="mb-8 max-w-[46ch] text-[16px] leading-relaxed text-muted">
-              Every row carries its workspace, and queries that forget it
-              don&rsquo;t compile. Tenant leaks aren&rsquo;t something you have
-              to remember to prevent.
-            </p>
+        {/* Outer plate */}
+        <div className="relative border border-line">
+          <CornerMarks />
 
-            <div className="border border-line-soft bg-surface p-4 font-mono text-[13.5px] leading-relaxed">
-              <span className="text-faint">prisma.board.findMany(</span>
-              <br />
-              <span className="pl-4 text-faint">where: &#123; </span>
-              <span className="text-accent">workspaceId: ctx.workspaceId</span>
-              <span className="text-faint"> &#125;</span>
-              <br />
-              <span className="text-faint">)</span>
+          {/* Row 1 — explainer on the left, the actual query on the right,
+              mirroring the reference's "text + diagram" band. */}
+          <div className="grid border-b border-line lg:grid-cols-2">
+            <div className="border-b border-line p-8 lg:border-b-0 lg:border-r lg:p-10">
+              <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.16em] text-accent">
+                Isolation
+              </p>
+              <h3 className="mb-3 text-[22px] font-medium">Isolated by default</h3>
+              <p className="max-w-[46ch] text-[16px] leading-relaxed text-muted">
+                Every row carries its workspace, and queries that forget it
+                don&rsquo;t compile. Tenant leaks aren&rsquo;t something you
+                have to remember to prevent.
+              </p>
+            </div>
+
+            <div className="flex items-center p-8 lg:p-10">
+              <div className="relative w-full border border-dashed border-line bg-surface/60 p-6 font-mono text-[13.5px] leading-relaxed">
+                <CornerMarks accent />
+                <span className="text-faint">prisma.board.findMany(</span>
+                <br />
+                <span className="pl-4 text-faint">where: &#123; </span>
+                <span className="text-accent">workspaceId: ctx.workspaceId</span>
+                <span className="text-faint"> &#125;</span>
+                <br />
+                <span className="text-faint">)</span>
+              </div>
             </div>
           </div>
 
-          {/* Narrow cell */}
-          <div className="bg-bg p-8">
-            <h3 className="mb-3 text-[20px] font-medium">Ordering that scales</h3>
-            <p className="text-[16px] leading-relaxed text-muted">
-              Fractional ranking means one row changes per drag — not the whole
-              list, and not a race when two people move at once.
-            </p>
-          </div>
+          {/* Row 2 — two halves, each with a heading and a nested plate of
+              stat cards. This nesting is what the previous version was
+              missing: plate > half > plate > cards. */}
+          <div className="grid lg:grid-cols-2">
+            <div className="border-b border-line p-8 lg:border-b-0 lg:border-r lg:p-10">
+              <div className="mb-7">
+                <h3 className="text-[26px] font-medium">Ordering</h3>
+                <p className="mt-1 text-[15px] text-muted">
+                  Fractional ranking, not renumbering
+                </p>
+              </div>
 
-          {/* Bottom row */}
-          {[
-            {
-              title: "Cards with substance",
-              body: "Descriptions, due dates, assignees, labels. Everything a real task needs, nothing it doesn't.",
-            },
-            {
-              title: "Built on Postgres",
-              body: "Real relations, real constraints, real transactions. Your data keeps its shape.",
-            },
-            {
-              title: "Yours to run",
-              body: "Postgres, Node, and React. No proprietary lock-in, no black boxes.",
-            },
-          ].map((cell) => (
-            <div key={cell.title} className="bg-bg p-8">
-              <h3 className="mb-3 text-[20px] font-medium">{cell.title}</h3>
-              <p className="text-[16px] leading-relaxed text-muted">{cell.body}</p>
+              <div className="relative border border-line p-5">
+                <CornerMarks />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Stat value="1" caption="/ row written per drag" />
+                  <Stat value="O(1)" caption="/ cost at any list size" />
+                  <Stat value="0" caption="/ renumbering passes" />
+                  <Stat value="Float" caption="/ rank column type" />
+                </div>
+              </div>
             </div>
-          ))}
+
+            <div className="p-8 lg:p-10">
+              <div className="mb-7">
+                <h3 className="text-[26px] font-medium text-accent">Tenancy</h3>
+                <p className="mt-1 text-[15px] text-accent/70">
+                  Enforced at the query layer
+                </p>
+              </div>
+
+              <div className="relative border border-accent/40 p-5">
+                <CornerMarks accent />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Stat accent value="0" caption="/ joins to filter by tenant" />
+                  <Stat accent value="1" caption="/ query to hydrate a board" />
+                  <Stat accent value="9" caption="/ tables, all scoped" />
+                  <Stat accent value="2" caption="/ auth gates per request" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

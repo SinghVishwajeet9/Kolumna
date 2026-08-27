@@ -1,5 +1,6 @@
 import { Nav } from "@/components/marketing/Nav";
 import { Hero } from "@/components/marketing/Hero";
+import { CrowdScene } from "@/components/marketing/CrowdScene";
 import { Steps } from "@/components/marketing/Steps";
 import { Breadth } from "@/components/marketing/Breadth";
 import { Features } from "@/components/marketing/Features";
@@ -28,6 +29,9 @@ export default function LandingPage() {
         {/* Full-bleed: no frame, no side margins, no grid around it. The
             framed grid only begins at the sections below. */}
         <Hero />
+
+        {/* Also full-bleed — the illustration needs the whole width. */}
+        <CrowdScene />
 
         {/* Side padding is calc(100%/16), matching the grid's
             background-size, so each block's left AND right edge lands on a
