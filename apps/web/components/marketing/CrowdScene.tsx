@@ -34,6 +34,7 @@ export function CrowdScene() {
           className="object-cover"
           style={{ objectPosition: "center 80%" }}
         />
+
       </div>
 
       {/* object-bottom keeps the crowd planted on the section's bottom edge
@@ -59,6 +60,16 @@ export function CrowdScene() {
           sizes="100vw"
           className="object-cover object-bottom"
         />
+
+        {/* Watermark, anchored near the top of the crowd panel — lower
+            than the halftone band above it, but still ahead of where the
+            figures start. */}
+        <span
+          className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap text-[clamp(1.75rem,5vw,3.5rem)] font-medium uppercase text-white"
+          style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}
+        >
+          kolumna
+        </span>
       </div>
     </section>
   );

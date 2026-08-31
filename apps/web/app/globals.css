@@ -28,7 +28,20 @@
   --color-accent: #5af7b3;
   --color-accent-dim: #2f6b53;
 
-  --font-sans: "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* For anything that should read as pixelated/terminal — the dot-grid
+     "chaos" word, code-style snippets. Not used as the body font. */
+  --font-mono: "Departure Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+}
+
+/* Self-hosted: Departure Mono isn't on Fontshare or Google Fonts. MIT
+   licensed, from github.com/rektdeckard/departure-mono. */
+@font-face {
+  font-family: "Departure Mono";
+  src: url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 html {

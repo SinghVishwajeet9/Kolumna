@@ -7,11 +7,13 @@ export function GooeyButton({
   href,
   className = "",
   labelClassName = "",
+  style,
   children,
 }: {
   href: string;
   className?: string;
   labelClassName?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   const inner = (
@@ -29,14 +31,14 @@ export function GooeyButton({
   // a "#section" jump through it just adds overhead for no benefit.
   if (href.startsWith("#")) {
     return (
-      <a href={href} className={`goo ${className}`}>
+      <a href={href} className={`goo ${className}`} style={style}>
         {inner}
       </a>
     );
   }
 
   return (
-    <Link href={href} className={`goo ${className}`}>
+    <Link href={href} className={`goo ${className}`} style={style}>
       {inner}
     </Link>
   );

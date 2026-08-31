@@ -33,15 +33,17 @@ export default function LandingPage() {
         {/* Also full-bleed — the illustration needs the whole width. */}
         <CrowdScene />
 
+        {/* Full-bleed too, immediately below the crowd — no gap, no
+            frame, no side margins. Its own internal padding handles the
+            content inset. */}
+        <Steps />
+
         {/* Side padding is calc(100%/16), matching the grid's
             background-size, so each block's left AND right edge lands on a
             grid line. (A percentage resolves against the containing block's
             width — the same width the grid is painted across. Using
             100vw here would drift by the scrollbar width.) */}
         <div className="flex flex-col gap-[var(--column-size)] px-6 pt-[var(--column-size)] lg:px-[calc(100%/16)]">
-          <Block>
-            <Steps />
-          </Block>
           <Block>
             <Breadth />
           </Block>

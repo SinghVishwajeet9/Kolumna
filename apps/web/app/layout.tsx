@@ -11,10 +11,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
       <head>
-        {/* General Sans — free stand-in for Roobert (which is commercial). */}
+        {/* Satoshi — free stand-in for Roobert (which is commercial). */}
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link
-          href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap"
+          href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap"
           rel="stylesheet"
         />
       </head>
