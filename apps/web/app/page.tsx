@@ -9,6 +9,9 @@ import { AISection } from "@/components/marketing/AISection";
 import { CTA } from "@/components/marketing/CTA";
 import { Footer } from "@/components/marketing/Footer";
 import { GooFilter } from "@/components/marketing/GooFilter";
+import { LoadingScreen } from "@/components/marketing/LoadingScreen";
+import { ScrollProgress } from "@/components/marketing/ScrollProgress";
+import { SmoothScroll } from "@/components/marketing/SmoothScroll";
 
 // Each framed section is its own bordered, OPAQUE block. The grid lives on
 // the page wrapper behind them, so it shows only in the one-column side
@@ -21,6 +24,19 @@ export default function LandingPage() {
   return (
     // id="top" is the scroll target for the footer's logo tile.
     <div id="top" className="grid-field">
+      {/* Eased momentum scrolling (Lenis). Native scroll for reduced-motion. */}
+      <SmoothScroll />
+
+      {/* Custom green scroll-progress bar on the right edge (replaces the
+          native scrollbar). Rendered before LoadingScreen so it hides the
+          native scrollbar before the loader measures the hero. */}
+      <ScrollProgress />
+
+      {/* Intro overlay — sits above everything, measures the hero's "chaos"
+          and hands off to it. Client component; renders nothing after it
+          finishes (or immediately, for reduced-motion). */}
+      <LoadingScreen />
+
       {/* Defines filter#goo, referenced by every gooey button on the page. */}
       <GooFilter />
       <Nav />
