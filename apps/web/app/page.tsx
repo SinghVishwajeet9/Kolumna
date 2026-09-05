@@ -17,8 +17,18 @@ import { SmoothScroll } from "@/components/marketing/SmoothScroll";
 // the framed region below (not the whole page), so it shows only in the
 // one-column side margins and in the gaps between blocks — never behind
 // content.
-function Block({ children }: { children: React.ReactNode }) {
-  return <div className="border border-line bg-bg">{children}</div>;
+function Block({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div className="border border-line bg-bg" style={style}>
+      {children}
+    </div>
+  );
 }
 
 export default function LandingPage() {
@@ -72,7 +82,11 @@ export default function LandingPage() {
           <Block>
             <Features />
           </Block>
-          <Block>
+          {/* marginTop = the TOP-edge knob for this box: it's added to the
+              one-square gap above, so a positive value pushes the box's top
+              border down, a negative value pulls it up. The bottom edge is
+              StatusBoard's own paddingBottom. */}
+          <Block style={{ marginTop: "0px", borderColor: "#ffffff" }}>
             <StatusBoard />
           </Block>
           <Block>

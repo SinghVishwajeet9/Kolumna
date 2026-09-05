@@ -60,7 +60,10 @@ function Stat({
 export function Features() {
   return (
     <section id="product" className="bg-bg">
-      <div className="px-6 pt-14 pb-24 md:px-10 lg:pb-32 lg:pt-16">
+      <div
+        className="px-6 pt-14 md:px-10 lg:pt-16"
+        style={{ paddingBottom: "134px" }}
+      >
         <h2 className="mb-4 max-w-[20ch] text-[clamp(2.25rem,4.5vw,3.5rem)] font-medium leading-[1.05] tracking-[-0.03em]">
           One board. <span className="text-accent">Zero friction.</span>
         </h2>
@@ -78,7 +81,9 @@ export function Features() {
               <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.16em] text-accent">
                 Isolation
               </p>
-              <h3 className="mb-3 text-[22px] font-medium">Isolated by default</h3>
+              <h3 className="mb-3 text-[22px] font-medium">
+                Isolated by default
+              </h3>
               <p className="max-w-[46ch] text-[16px] leading-relaxed text-muted">
                 Every row carries its workspace, and queries that forget it
                 don&rsquo;t compile. Tenant leaks aren&rsquo;t something you
@@ -92,7 +97,9 @@ export function Features() {
                 <span className="text-faint">prisma.board.findMany(</span>
                 <br />
                 <span className="pl-4 text-faint">where: &#123; </span>
-                <span className="text-accent">workspaceId: ctx.workspaceId</span>
+                <span className="text-accent">
+                  workspaceId: ctx.workspaceId
+                </span>
                 <span className="text-faint"> &#125;</span>
                 <br />
                 <span className="text-faint">)</span>
@@ -119,10 +126,26 @@ export function Features() {
               <div className="relative border border-line p-5">
                 <CornerMarks />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Stat value="1" caption="/ row written per drag" color="#5af7b3" />
-                  <Stat value="O(1)" caption="/ cost at any list size" color="#7dd3fc" />
-                  <Stat value="0" caption="/ renumbering passes" color="#c4b5fd" />
-                  <Stat value="Float" caption="/ rank column type" color="#fcd34d" />
+                  <Stat
+                    value="1"
+                    caption="/ row written per drag"
+                    color="#5af7b3"
+                  />
+                  <Stat
+                    value="O(1)"
+                    caption="/ cost at any list size"
+                    color="#7dd3fc"
+                  />
+                  <Stat
+                    value="0"
+                    caption="/ renumbering passes"
+                    color="#c4b5fd"
+                  />
+                  <Stat
+                    value="Float"
+                    caption="/ rank column type"
+                    color="#fcd34d"
+                  />
                 </div>
               </div>
             </div>
@@ -143,10 +166,26 @@ export function Features() {
               <div className="relative border border-line p-5">
                 <CornerMarks />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Stat value="0" caption="/ joins to filter by tenant" color="#86efac" />
-                  <Stat value="1" caption="/ query to hydrate a board" color="#f9a8d4" />
-                  <Stat value="9" caption="/ tables, all scoped" color="#67e8f9" />
-                  <Stat value="2" caption="/ auth gates per request" color="#d9f99d" />
+                  <Stat
+                    value="0"
+                    caption="/ joins to filter by tenant"
+                    color="#86efac"
+                  />
+                  <Stat
+                    value="1"
+                    caption="/ query to hydrate a board"
+                    color="#f9a8d4"
+                  />
+                  <Stat
+                    value="9"
+                    caption="/ tables, all scoped"
+                    color="#67e8f9"
+                  />
+                  <Stat
+                    value="2"
+                    caption="/ auth gates per request"
+                    color="#d9f99d"
+                  />
                 </div>
               </div>
             </div>
