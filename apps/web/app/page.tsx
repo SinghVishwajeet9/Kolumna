@@ -14,8 +14,9 @@ import { ScrollProgress } from "@/components/marketing/ScrollProgress";
 import { SmoothScroll } from "@/components/marketing/SmoothScroll";
 
 // Each framed section is its own bordered, OPAQUE block. The grid lives on
-// the page wrapper behind them, so it shows only in the one-column side
-// margins and in the gaps between blocks — never behind content.
+// the framed region below (not the whole page), so it shows only in the
+// one-column side margins and in the gaps between blocks — never behind
+// content.
 function Block({ children }: { children: React.ReactNode }) {
   return <div className="border border-line bg-bg">{children}</div>;
 }
@@ -23,7 +24,7 @@ function Block({ children }: { children: React.ReactNode }) {
 export default function LandingPage() {
   return (
     // id="top" is the scroll target for the footer's logo tile.
-    <div id="top" className="grid-field">
+    <div id="top">
       {/* Eased momentum scrolling (Lenis). Native scroll for reduced-motion. */}
       <SmoothScroll />
 
@@ -54,15 +55,20 @@ export default function LandingPage() {
             content inset. */}
         <Steps />
 
-        {/* Side padding is calc(100%/16), matching the grid's
-            background-size, so each block's left AND right edge lands on a
-            grid line. (A percentage resolves against the containing block's
-            width — the same width the grid is painted across. Using
-            100vw here would drift by the scrollbar width.) */}
-        <div className="flex flex-col gap-[var(--column-size)] px-6 pt-[var(--column-size)] lg:px-[calc(100%/16)]">
-          <Block>
-            <Breadth />
-          </Block>
+        {/* Full-bleed like Steps — extends edge to edge, no frame, no grid
+            margins around it. Its own internal padding handles the inset. */}
+        <Breadth />
+
+        {/* grid-field lives HERE, not on the page root, so its rows are
+            anchored to the top of this region — the squares start clean and
+            complete right after the section above, instead of being sliced
+            wherever the page-height happened to land.
+            Side padding is calc(100%/16), matching the grid's background-size,
+            so each block's left AND right edge lands on a grid line. (A
+            percentage resolves against the containing block's width — the same
+            width the grid is painted across. Using 100vw here would drift by
+            the scrollbar width.) */}
+        <div className="grid-field flex flex-col gap-[var(--column-size)] px-6 pt-[var(--column-size)] lg:px-[calc(100%/16)]">
           <Block>
             <Features />
           </Block>

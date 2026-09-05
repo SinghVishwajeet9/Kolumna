@@ -2,9 +2,6 @@
 // registration/crop-mark device that gives technical-drawing UIs their
 // "spec sheet" feel. Purely decorative; the parent needs `relative`.
 function CornerMarks({ accent = false }: { accent?: boolean }) {
-  // Hollow, not solid — an outlined square with the page colour showing
-  // through, so it reads as a registration mark punched over the border
-  // rather than a dot sitting on it.
   const tone = accent ? "border-accent" : "border-faint";
   return (
     <>
@@ -25,31 +22,33 @@ function CornerMarks({ accent = false }: { accent?: boolean }) {
   );
 }
 
-// Big value, small caption — the unit that carries the visual weight in a
-// spec panel. Every figure here is a real property of the system, not a
-// marketing number.
+// Big value, small caption. The value colour comes from the caller so each
+// card can carry a different hue — same palette as the Breadth colour-run.
+// Every figure is a real property of the system, not a marketing number.
 function Stat({
   value,
   caption,
-  accent = false,
+  color,
 }: {
   value: string;
   caption: string;
-  accent?: boolean;
+  color: string;
 }) {
   return (
-    // Dashed border and a real fill — a solid hairline with a near-invisible
-    // tint read as an empty outline rather than a filled plate.
+    // Border and fill are tinted with the value's own colour (8-digit hex =
+    // colour + alpha): ~50% on the dashed border, ~8% on the fill.
     <div
-      className={`border border-dashed p-7 ${
-        accent ? "border-accent/50 bg-accent/[0.10]" : "border-faint/50 bg-white/[0.035]"
-      }`}
-      style={{ borderRadius: "8px" }}
+      className="border border-dashed p-7"
+      style={{
+        borderRadius: "8px",
+        borderColor: `${color}80`,
+        backgroundColor: `${color}14`,
+        fontFamily: "var(--font-mono)",
+      }}
     >
       <p
-        className={`text-[30px] font-medium leading-none tracking-[-0.02em] ${
-          accent ? "text-accent" : "text-fg"
-        }`}
+        className="text-[30px] font-medium leading-none tracking-[-0.02em]"
+        style={{ color }}
       >
         {value}
       </p>
@@ -61,7 +60,7 @@ function Stat({
 export function Features() {
   return (
     <section id="product" className="bg-bg">
-      <div className="px-6 py-24 md:px-10 lg:py-32">
+      <div className="px-6 pt-14 pb-24 md:px-10 lg:pb-32 lg:pt-16">
         <h2 className="mb-4 max-w-[20ch] text-[clamp(2.25rem,4.5vw,3.5rem)] font-medium leading-[1.05] tracking-[-0.03em]">
           One board. <span className="text-accent">Zero friction.</span>
         </h2>
@@ -69,10 +68,9 @@ export function Features() {
           The boring parts done properly — so the interesting parts stay fast.
         </p>
 
-        {/* Outer plate */}
+        {/* Outer plate — no corner marks of its own; those live on the
+            inner plates. */}
         <div className="relative border border-line">
-          <CornerMarks />
-
           {/* Row 1 — explainer on the left, the actual query on the right,
               mirroring the reference's "text + diagram" band. */}
           <div className="grid border-b border-line lg:grid-cols-2">
@@ -102,13 +100,17 @@ export function Features() {
             </div>
           </div>
 
-          {/* Row 2 — two halves, each with a heading and a nested plate of
-              stat cards. This nesting is what the previous version was
-              missing: plate > half > plate > cards. */}
+          {/* Row 2 — two halves, each a heading and a nested plate of stat
+              cards. Values use the multicolour Breadth palette. */}
           <div className="grid lg:grid-cols-2">
             <div className="border-b border-line p-8 lg:border-b-0 lg:border-r lg:p-10">
               <div className="mb-7">
-                <h3 className="text-[26px] font-medium">Ordering</h3>
+                <h3
+                  className="text-[26px] font-medium"
+                  style={{ color: "#5af7b3" }}
+                >
+                  Ordering
+                </h3>
                 <p className="mt-1 text-[15px] text-muted">
                   Fractional ranking, not renumbering
                 </p>
@@ -117,29 +119,34 @@ export function Features() {
               <div className="relative border border-line p-5">
                 <CornerMarks />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Stat value="1" caption="/ row written per drag" />
-                  <Stat value="O(1)" caption="/ cost at any list size" />
-                  <Stat value="0" caption="/ renumbering passes" />
-                  <Stat value="Float" caption="/ rank column type" />
+                  <Stat value="1" caption="/ row written per drag" color="#5af7b3" />
+                  <Stat value="O(1)" caption="/ cost at any list size" color="#7dd3fc" />
+                  <Stat value="0" caption="/ renumbering passes" color="#c4b5fd" />
+                  <Stat value="Float" caption="/ rank column type" color="#fcd34d" />
                 </div>
               </div>
             </div>
 
             <div className="p-8 lg:p-10">
               <div className="mb-7">
-                <h3 className="text-[26px] font-medium text-accent">Tenancy</h3>
-                <p className="mt-1 text-[15px] text-accent/70">
+                <h3
+                  className="text-[26px] font-medium"
+                  style={{ color: "#f9a8d4" }}
+                >
+                  Tenancy
+                </h3>
+                <p className="mt-1 text-[15px] text-muted">
                   Enforced at the query layer
                 </p>
               </div>
 
-              <div className="relative border border-accent/40 p-5">
-                <CornerMarks accent />
+              <div className="relative border border-line p-5">
+                <CornerMarks />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Stat accent value="0" caption="/ joins to filter by tenant" />
-                  <Stat accent value="1" caption="/ query to hydrate a board" />
-                  <Stat accent value="9" caption="/ tables, all scoped" />
-                  <Stat accent value="2" caption="/ auth gates per request" />
+                  <Stat value="0" caption="/ joins to filter by tenant" color="#86efac" />
+                  <Stat value="1" caption="/ query to hydrate a board" color="#f9a8d4" />
+                  <Stat value="9" caption="/ tables, all scoped" color="#67e8f9" />
+                  <Stat value="2" caption="/ auth gates per request" color="#d9f99d" />
                 </div>
               </div>
             </div>

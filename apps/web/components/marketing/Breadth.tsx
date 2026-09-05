@@ -25,16 +25,16 @@ const things = [
 export function Breadth() {
   return (
     <section className="bg-bg">
-      <div className="px-6 py-24 md:px-10 lg:py-32">
-        <h2 className="mb-16 max-w-[18ch] text-[clamp(2.25rem,4.5vw,3.5rem)] font-medium leading-[1.05] tracking-[-0.03em]">
+      <div className="px-6 py-24 md:px-16 lg:px-24 lg:py-32">
+        <h2 className="mb-10 max-w-[18ch] text-[clamp(2.25rem,4.5vw,3.5rem)] font-medium leading-[1.05] tracking-[-0.03em]">
           Every kind of work with <span className="text-accent">zero ceremony</span>
         </h2>
 
         <div className="grid border border-line-soft md:grid-cols-2">
           {/* Left: the colour-run */}
-          <div className="border-b border-line-soft p-8 md:border-b-0 md:border-r md:p-12">
+          <div className="flex items-start border-b border-line-soft pb-8 pl-8 pr-8 pt-8 md:border-b-0 md:border-r md:pb-14 md:pl-24 md:pr-24 md:pt-20">
             <div
-              className="max-h-[340px] overflow-hidden text-[clamp(1.5rem,2.6vw,2rem)] font-medium leading-[1.35] tracking-[-0.02em]"
+              className="max-h-[380px] overflow-hidden text-[clamp(1.5rem,2.6vw,2rem)] font-medium leading-[1.35] tracking-[-0.02em]"
               style={{
                 maskImage:
                   "linear-gradient(to bottom, black 62%, transparent 100%)",
@@ -57,14 +57,10 @@ export function Breadth() {
               past the card on every side — without clipping here that bleed
               escapes the panel on narrow screens and gives the whole page a
               horizontal scrollbar. */}
-          <div className="overflow-hidden p-8 md:p-12">
+          <div className="overflow-hidden pb-8 pl-8 pr-8 pt-8 md:pb-14 md:pl-24 md:pr-24 md:pt-20">
             <h3 className="mb-4 max-w-[18ch] text-[clamp(1.5rem,2.6vw,2rem)] font-medium leading-[1.15] tracking-[-0.02em]">
               Live on every screen watching the board
             </h3>
-            <p className="mb-6 max-w-[44ch] text-[16px] leading-relaxed text-muted">
-              Move a card and it lands for everyone instantly. No refresh, no
-              stale state, no &ldquo;can you reload?&rdquo;
-            </p>
             <a
               href="#ai"
               className="mb-10 inline-flex items-center gap-1.5 text-[15px] text-accent transition-opacity hover:opacity-80"
@@ -105,7 +101,7 @@ export function Breadth() {
                 }}
               />
 
-              <div className="relative border border-line-soft bg-surface">
+              <div className="relative border border-[#ffffffb3] bg-surface">
                 <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
                 <span className="flex -space-x-1.5">
                   {["bg-[#5af7b3]", "bg-[#7dd3fc]", "bg-[#c4b5fd]"].map((tone, i) => (
