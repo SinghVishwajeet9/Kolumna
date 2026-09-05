@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Nav } from "@/components/marketing/Nav";
 import { Hero } from "@/components/marketing/Hero";
 import { CrowdScene } from "@/components/marketing/CrowdScene";
@@ -5,7 +6,6 @@ import { Steps } from "@/components/marketing/Steps";
 import { Breadth } from "@/components/marketing/Breadth";
 import { Features } from "@/components/marketing/Features";
 import { StatusBoard } from "@/components/marketing/StatusBoard";
-import { AISection } from "@/components/marketing/AISection";
 import { CTA } from "@/components/marketing/CTA";
 import { Footer } from "@/components/marketing/Footer";
 import { GooFilter } from "@/components/marketing/GooFilter";
@@ -90,17 +90,30 @@ export default function LandingPage() {
             <StatusBoard />
           </Block>
           <Block>
-            <AISection />
-          </Block>
-          <Block>
             <CTA />
           </Block>
         </div>
       </main>
 
+      {/* Halftone band — the same border.png slice used below the navbar —
+          as a divider above the footer. */}
+      <div
+        aria-hidden="true"
+        className="relative mt-[var(--column-size)] w-full overflow-hidden"
+        style={{ height: "56px" }}
+      >
+        <Image
+          src="/border.png"
+          alt=""
+          fill
+          sizes="100vw"
+          className="object-cover object-bottom"
+        />
+      </div>
+
       {/* Full-bleed like the hero — the giant wordmark needs the whole
           width, so no frame and no side margins here. */}
-      <div className="mt-[var(--column-size)]">
+      <div>
         <Footer />
       </div>
     </div>

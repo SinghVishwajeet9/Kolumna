@@ -1,7 +1,18 @@
 export function AISection() {
   return (
     <section id="ai" className="relative overflow-hidden bg-bg">
-      <div className="pointer-events-none absolute -right-40 top-1/2 h-[420px] w-[420px] -translate-y-1/2 rounded-full bg-accent/[0.06] blur-[120px]" />
+      {/* Dual corner wash — green bleeding in from the left, pink from the
+          right — for a soft two-tone glow behind the content. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-40 -top-32 h-[560px] w-[560px] rounded-full blur-[140px]"
+        style={{ background: "rgba(90,247,179,0.10)" }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-40 -bottom-32 h-[560px] w-[560px] rounded-full blur-[140px]"
+        style={{ background: "rgba(249,168,212,0.10)" }}
+      />
 
       <div className="relative grid items-center gap-16 px-6 py-24 md:px-10 lg:grid-cols-2 lg:py-32">
         <div>

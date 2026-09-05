@@ -3,6 +3,7 @@
 
 type Card = {
   title: string;
+  color: string;
   tag?: string;
   tagTone?: "accent" | "plain";
   dragging?: boolean;
@@ -15,9 +16,9 @@ const columns: Column[] = [
   {
     title: "Backlog",
     cards: [
-      { title: "Draft Q4 launch brief", tag: "Design", spark: true, avatar: true },
-      { title: "Audit onboarding funnel" },
-      { title: "Spike: offline mode", tag: "Research", spark: true, avatar: true },
+      { title: "Draft Q4 launch brief", color: "#5af7b3", tag: "Design", spark: true, avatar: true },
+      { title: "Audit onboarding funnel", color: "#7dd3fc" },
+      { title: "Spike: offline mode", color: "#c4b5fd", tag: "Research", spark: true, avatar: true },
     ],
   },
   {
@@ -26,23 +27,24 @@ const columns: Column[] = [
     cards: [
       {
         title: "Board drag + drop",
+        color: "#fcd34d",
         tag: "AI split",
         tagTone: "accent",
         dragging: true,
         spark: true,
         avatar: true,
       },
-      { title: "Workspace invites" },
+      { title: "Workspace invites", color: "#86efac" },
     ],
   },
   {
     title: "Review",
     cards: [
-      { title: "Tenant isolation tests", tag: "Backend", spark: true, avatar: true },
-      { title: "Rank rebalancing" },
+      { title: "Tenant isolation tests", color: "#f9a8d4", tag: "Backend", spark: true, avatar: true },
+      { title: "Rank rebalancing", color: "#67e8f9" },
     ],
   },
-  { title: "Done", cards: [{ title: "Session auth" }] },
+  { title: "Done", cards: [{ title: "Session auth", color: "#d9f99d" }] },
 ];
 
 // Tiny activity graph. Decorative — it reads as "this card has history"
@@ -73,19 +75,6 @@ export function BoardPreview() {
         // Narrower columns, taller cards — the panel is deliberately more
         // portrait than before, so width is the thing that gives.
         <div key={column.title} className="relative w-[143px] shrink-0">
-          {/* The active column sits in its own pool of light, so the eye
-              lands there first. */}
-          {column.active && (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -inset-x-3 -inset-y-4 rounded-2xl"
-              style={{
-                background:
-                  "radial-gradient(ellipse 70% 55% at 50% 35%, rgba(90,247,179,0.16), transparent 72%)",
-              }}
-            />
-          )}
-
           <div className="relative mb-3.5 flex items-center justify-between px-1">
             <span className="text-[14px] font-medium text-muted">{column.title}</span>
             <span className="text-[13px] text-faint">{column.cards.length}</span>
@@ -95,22 +84,19 @@ export function BoardPreview() {
             {column.cards.map((card) => (
               <div
                 key={card.title}
-                className={
-                  card.dragging
-                    ? "rotate-[-1.5deg] border border-accent/60 p-4"
-                    : "border border-line p-4"
-                }
+                className={card.dragging ? "rotate-[-1.5deg] border p-4" : "border p-4"}
                 style={{
                   borderRadius: "10px",
+                  // Border and fill tinted with the card's own colour (8-digit
+                  // hex = colour + alpha), over the dark panel surface.
+                  borderColor: card.dragging ? card.color : `${card.color}80`,
                   // Lit from above rather than a flat fill — the reference's
                   // cards are all subtly brighter along their top edge, which
                   // is what makes them look like physical panels.
                   backgroundImage:
                     "linear-gradient(to bottom, rgba(255,255,255,0.055), rgba(255,255,255,0) 60%)",
-                  backgroundColor: "var(--color-surface-2)",
-                  ...(card.dragging
-                    ? { boxShadow: "0 20px 50px -12px rgba(90,247,179,0.5)" }
-                    : { boxShadow: "0 2px 10px -4px rgba(0,0,0,0.7)" }),
+                  backgroundColor: `${card.color}12`,
+                  boxShadow: "0 2px 10px -4px rgba(0,0,0,0.7)",
                 }}
               >
                 <p className="text-[14.5px] leading-snug text-fg/90">{card.title}</p>
