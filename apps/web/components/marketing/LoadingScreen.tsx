@@ -25,7 +25,7 @@ const T_SCATTER = 1500;
 const T_CHAOS = 3600; // chaos shows up toward the end, not the start
 const T_FADE_WORDS = 4600;
 const T_REVEAL = 5300;
-const REVEAL_MS = 2400; // slow fade of the overlay = slow fade-in of the hero
+const REVEAL_MS = 950; // fade of the overlay = fade-in of the hero — quick + smooth
 const T_DONE = T_REVEAL + REVEAL_MS + 200;
 
 const WORD_STAGGER = 130; // between each scattered word appearing
@@ -33,7 +33,13 @@ const WORD_STAGGER = 130; // between each scattered word appearing
 // All board/product vocabulary — the intro previews what the site is about.
 // Positions and sizes are hand-placed (not random) so server and client
 // render the same thing and hydration stays happy. size = rem at desktop.
-const SCATTER = [
+const SCATTER: {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  color?: string;
+}[] = [
   { text: "sprints", x: 18, y: 20, size: 2.4 },
   { text: "backlog", x: 76, y: 15, size: 1.5 },
   { text: "roadmap", x: 32, y: 72, size: 2.0 },
@@ -48,7 +54,11 @@ const SCATTER = [
   { text: "ship it", x: 80, y: 85, size: 2.2 },
   { text: "tenants", x: 52, y: 89, size: 1.7 },
   { text: "rank", x: 74, y: 64, size: 2.4 },
-  { text: "sync", x: 58, y: 55, size: 1.9 },
+  { text: "sync", x: 62, y: 50, size: 1.9 },
+  // Brand name, treated as just another scattered word — but pure white so
+  // it reads as the label among the vocabulary. Comes before chaos (which
+  // still lands last, in its hero spot).
+  { text: "kolumna", x: 42, y: 56, size: 2.6, color: "#ffffff" },
 ];
 
 // Responsive: full size on desktop, scaled down on narrow screens.
@@ -209,7 +219,7 @@ export function LoadingScreen() {
           style={{
             left: `${w.x}%`,
             top: `${w.y}%`,
-            color: "rgba(255,255,255,0.85)",
+            color: w.color ?? "rgba(255,255,255,0.85)",
             fontSize: sz(w.size),
             whiteSpace: "nowrap",
             opacity: wordsVisible ? 1 : 0,
