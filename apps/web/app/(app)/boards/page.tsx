@@ -5,9 +5,26 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { LogoMark } from "@/components/Logo";
+import { Field } from "@/components/ui/Field";
+import { CornerMarks } from "@/components/ui/CornerMarks";
+import { GooeyButton } from "@/components/marketing/GooeyButton";
 
 type Workspace = { id: string; name: string; slug: string };
 type Board = { id: string; title: string };
+
+// Same multicolour palette as the landing page's cards / colour-run, so a
+// wall of boards reads as one family rather than flat grey.
+const CARD_COLORS = [
+  "#5af7b3",
+  "#7dd3fc",
+  "#c4b5fd",
+  "#fcd34d",
+  "#86efac",
+  "#f9a8d4",
+  "#67e8f9",
+  "#d9f99d",
+];
 
 export default function BoardsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -67,69 +84,139 @@ export default function BoardsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Boards</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          + Create board
-        </button>
+    <main className="grid-field min-h-[calc(100vh-64px)]">
+      <div className="mx-auto max-w-5xl px-6 py-14 lg:py-20">
+        <div className="mb-12 flex items-end justify-between gap-4">
+          <div>
+            <h1
+              className="text-[clamp(2rem,4vw,3rem)] font-medium tracking-[-0.02em]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Your <span className="text-accent">boards</span>
+            </h1>
+            {workspace && (
+              <p className="mt-2 text-[15px] text-muted">{workspace.name}</p>
+            )}
+          </div>
+
+          <GooeyButton
+            onClick={() => setIsModalOpen(true)}
+            className="group flex shrink-0 items-center gap-2 bg-[#ffffff] px-6 py-3.5 text-[15px] font-medium text-bg"
+            style={{ borderRadius: "8px", fontFamily: "var(--font-mono)" }}
+          >
+            + New board
+          </GooeyButton>
+        </div>
+
+        {loading && (
+          <p className="text-[15px] text-faint" style={{ fontFamily: "var(--font-mono)" }}>
+            Loading…
+          </p>
+        )}
+
+        {!loading && boards.length === 0 && (
+          <div
+            className="relative border border-dashed border-line px-8 py-16 text-center"
+            style={{ borderRadius: "14px" }}
+          >
+            <CornerMarks />
+            <p className="text-[17px] text-muted">No boards yet.</p>
+            <p className="mt-1 text-[14px] text-faint">
+              Create your first board to start putting work in columns.
+            </p>
+          </div>
+        )}
+
+        {!loading && boards.length > 0 && (
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {boards.map((board, i) => {
+              const color = CARD_COLORS[i % CARD_COLORS.length];
+              return (
+                <li key={board.id}>
+                  <Link
+                    href={`/b/${board.id}`}
+                    className="group relative block border p-6 transition-transform duration-200 hover:-translate-y-1"
+                    style={{
+                      borderRadius: "12px",
+                      borderColor: `${color}55`,
+                      backgroundColor: `${color}10`,
+                    }}
+                  >
+                    <span
+                      className="mb-6 flex items-center justify-center"
+                      style={{
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "9px",
+                        backgroundColor: `${color}1f`,
+                      }}
+                    >
+                      <LogoMark style={{ width: "20px", color }} />
+                    </span>
+                    <p className="text-[17px] font-medium leading-snug text-fg">
+                      {board.title}
+                    </p>
+                    <span
+                      className="mt-3 inline-block text-[13px] text-faint transition-transform group-hover:translate-x-0.5"
+                      style={{ fontFamily: "var(--font-mono)", color }}
+                    >
+                      open →
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      {loading && <p className="text-zinc-500">Loading…</p>}
-
-      {!loading && boards.length === 0 && (
-        <p className="text-zinc-500">No boards yet.</p>
-      )}
-
-      {!loading && boards.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {boards.map((board) => (
-            <li key={board.id}>
-              <Link
-                href={`/b/${board.id}`}
-                className="block rounded-md border border-zinc-200 px-4 py-3 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-              >
-                {board.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* The modal: just a fixed-position overlay, conditionally rendered.
-          No library — `isModalOpen` decides whether any of this exists. */}
+      {/* The modal: a fixed overlay, conditionally rendered. No library —
+          `isModalOpen` decides whether any of this exists. */}
       {isModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-          <div className="w-80 rounded-lg bg-white p-4 dark:bg-zinc-900">
-            <h2 className="mb-3 font-medium text-zinc-900 dark:text-zinc-50">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="animate-rise relative w-full max-w-[420px] border border-line bg-surface p-7"
+            style={{
+              borderRadius: "16px",
+              boxShadow: "0 40px 90px -24px rgba(0,0,0,0.9)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CornerMarks />
+            <h2
+              className="mb-6 text-[22px] font-medium tracking-[-0.01em]"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
               New board
             </h2>
             <form onSubmit={handleCreateBoard}>
-              <input
+              <Field
+                label="Board title"
                 autoFocus
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Board title"
-                className="mb-3 w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                placeholder="Q4 Product Roadmap"
+                required
               />
-              <div className="flex justify-end gap-2">
+              <div className="mt-6 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400"
+                  className="px-4 py-2.5 text-[14px] text-muted transition-colors hover:text-fg"
                 >
                   Cancel
                 </button>
-                <button
+                <GooeyButton
                   type="submit"
                   disabled={creating}
-                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                  className="group flex items-center bg-[#ffffff] px-6 py-2.5 text-[14px] font-medium text-bg disabled:opacity-60"
+                  style={{ borderRadius: "8px", fontFamily: "var(--font-mono)" }}
                 >
-                  {creating ? "Creating…" : "Create"}
-                </button>
+                  {creating ? "Creating…" : "Create board"}
+                </GooeyButton>
               </div>
             </form>
           </div>
