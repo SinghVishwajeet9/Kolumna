@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import * as boardRepo from "../repositories/board.repo.js";
 import * as listRepo from "../repositories/list.repo.js";
+import { writeAuditEntry } from "../lib/audit.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const router = Router();
@@ -28,6 +29,14 @@ router.post("/boards/:boardId/lists", requireAuth, async (req, res, next) => {
 
     const rank = await listRepo.getMaxRank(ctx, board.id);
     const list = await listRepo.createList(ctx, board.id, parsed.data.title, rank);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "LIST.CREATE",
+      targetType: "List",
+      targetId: list.id,
+      result: "SUCCESS",
+    });
     res.status(201).json(list);
   } catch (err) {
     next(err);
@@ -47,6 +56,14 @@ router.patch("/lists/:listId", requireAuth, async (req, res, next) => {
 
     const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     await listRepo.updateList(ctx, list.id, parsed.data.title);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "LIST.UPDATE",
+      targetType: "List",
+      targetId: list.id,
+      result: "SUCCESS",
+    });
     res.json({ ...list, title: parsed.data.title });
   } catch (err) {
     next(err);
@@ -60,6 +77,14 @@ router.delete("/lists/:listId", requireAuth, async (req, res, next) => {
 
     const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     await listRepo.deleteList(ctx, list.id);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "LIST.DELETE",
+      targetType: "List",
+      targetId: list.id,
+      result: "SUCCESS",
+    });
     res.status(204).send();
   } catch (err) {
     next(err);

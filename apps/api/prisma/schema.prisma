@@ -33,6 +33,9 @@ model Actor {
   ownedAgents   Agent[]      @relation("AgentOwner")
   memberships   Membership[]
   assignedCards Card[]
+
+  auditEntries           AuditEntry[] @relation("AuditActor")
+  auditEntriesOnBehalfOf AuditEntry[] @relation("AuditOnBehalfOf")
 }
 
 model User {
@@ -58,16 +61,17 @@ model Session {
 }
 
 model Workspace {
-  id        String       @id @default(cuid())
-  name      String
-  slug      String       @unique
-  createdAt DateTime     @default(now())
-  members   Membership[]
-  boards    Board[]
-  labels    Label[]
-  lists     List[]
-  cards     Card[]
-  agents    Agent[]
+  id           String       @id @default(cuid())
+  name         String
+  slug         String       @unique
+  createdAt    DateTime     @default(now())
+  members      Membership[]
+  boards       Board[]
+  labels       Label[]
+  lists        List[]
+  cards        Card[]
+  agents       Agent[]
+  auditEntries AuditEntry[]
 }
 
 enum WorkspaceRole {
@@ -143,6 +147,43 @@ model AgentGrant {
 
   @@index([agentId])
   @@index([workspaceId])
+}
+
+// Append-only, tamper-evident log of every attributable action — the #1
+// differentiator (kolumna-architecture.md §4.2). Every entry's hash commits
+// to the previous entry's hash (SHA-256(prevHash + canonical(entry))), so
+// altering or deleting a past entry breaks the chain from that point
+// forward — detectable, not just theoretically wrong. See lib/audit.ts for
+// the writer/verifier. Rows are never updated or deleted by app code.
+model AuditEntry {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  seq               Int // per-workspace monotonic sequence — the chain's order
+  actorId           String // who acted (human or agent)
+  onBehalfOfActorId String? // delegation: whose authority it used, if any
+  action            String // e.g. "CARD.ASSIGN", "AGENT.ACTIVATE"
+  targetType        String // e.g. "Card", "Agent"
+  targetId          String
+  toolInvoked       String? // which MCP tool/operation, once those exist (Phase 3+)
+  resource          String? // an external resource touched, if any
+  result            String // SUCCESS | DENIED | PENDING_APPROVAL | ERROR
+  reasoningSummary  String? // the agent's own "why" — null for human actions
+  confidence        Float? // agent's stated confidence 0..1 — Phase 4+
+  model             String? // which model produced this action — Phase 3+
+  tokensIn          Int?
+  tokensOut         Int?
+  costUsd           Float?
+  prevHash          String // the previous entry's hash, or the genesis hash if seq 1
+  hash              String   @unique
+  createdAt         DateTime // set by the app (not @default) so it's part of what's hashed
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor      Actor     @relation("AuditActor", fields: [actorId], references: [id])
+  onBehalfOf Actor?    @relation("AuditOnBehalfOf", fields: [onBehalfOfActorId], references: [id])
+
+  @@unique([workspaceId, seq])
+  @@index([workspaceId])
+  @@index([targetType, targetId])
 }
 
 model Board {

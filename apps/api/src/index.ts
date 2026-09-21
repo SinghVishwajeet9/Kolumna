@@ -8,6 +8,7 @@ import workspaceRoutes from "./routes/workspace.routes.js";
 import boardRoutes from "./routes/board.routes.js";
 import listRoutes from "./routes/list.routes.js";
 import cardRoutes from "./routes/card.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
 import agentRoutes from "./gateway/agent.routes.js";
 import agentAuthRoutes from "./gateway/agentAuth.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -40,6 +41,7 @@ app.use("/workspaces", workspaceRoutes);
 app.use(boardRoutes);
 app.use(listRoutes);
 app.use(cardRoutes);
+app.use(auditRoutes);
 app.use(agentRoutes);
 app.use(agentAuthRoutes);
 

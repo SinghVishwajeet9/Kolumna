@@ -10,6 +10,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import * as agentRepo from "./agent.repo.js";
 import { revokeAllGrantsForAgent } from "./agentGrant.repo.js";
+import { writeAuditEntry } from "../lib/audit.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const router = Router();
@@ -30,6 +31,15 @@ router.post(
       if (!parsed.success) throw new ValidationError(parsed.error.message);
 
       const { agent, clientId, clientSecret } = await agentRepo.createAgent(req.ctx!, parsed.data);
+
+      await writeAuditEntry({
+        workspaceId: req.ctx!.workspaceId,
+        actorId: req.ctx!.actorId,
+        action: "AGENT.REGISTER",
+        targetType: "Agent",
+        targetId: agent.id,
+        result: "SUCCESS",
+      });
 
       // clientSecret is shown exactly once, here — the caller must store it
       // now. The server never has it in recoverable form again.
@@ -88,6 +98,14 @@ router.patch(
       }
 
       await agentRepo.updateAgentStatus(req.ctx!, agent.id, "ACTIVE");
+      await writeAuditEntry({
+        workspaceId: req.ctx!.workspaceId,
+        actorId: req.ctx!.actorId,
+        action: "AGENT.ACTIVATE",
+        targetType: "Agent",
+        targetId: agent.id,
+        result: "SUCCESS",
+      });
       res.json({ id: agent.id, status: "ACTIVE" });
     } catch (err) {
       next(err);
@@ -109,6 +127,14 @@ router.patch(
 
       await agentRepo.updateAgentStatus(req.ctx!, agent.id, "SUSPENDED");
       await revokeAllGrantsForAgent(agent.id); // suspension kills live access immediately
+      await writeAuditEntry({
+        workspaceId: req.ctx!.workspaceId,
+        actorId: req.ctx!.actorId,
+        action: "AGENT.SUSPEND",
+        targetType: "Agent",
+        targetId: agent.id,
+        result: "SUCCESS",
+      });
       res.json({ id: agent.id, status: "SUSPENDED" });
     } catch (err) {
       next(err);
@@ -127,6 +153,14 @@ router.patch(
 
       await agentRepo.updateAgentStatus(req.ctx!, agent.id, "REVOKED");
       await revokeAllGrantsForAgent(agent.id); // terminal — no path back from here
+      await writeAuditEntry({
+        workspaceId: req.ctx!.workspaceId,
+        actorId: req.ctx!.actorId,
+        action: "AGENT.REVOKE",
+        targetType: "Agent",
+        targetId: agent.id,
+        result: "SUCCESS",
+      });
       res.json({ id: agent.id, status: "REVOKED" });
     } catch (err) {
       next(err);

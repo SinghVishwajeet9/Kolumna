@@ -5,6 +5,7 @@ import * as cardRepo from "../repositories/card.repo.js";
 import * as listRepo from "../repositories/list.repo.js";
 import { isWorkspaceMember } from "../repositories/workspace.repo.js";
 import { calculateRank } from "../services/ranking.js";
+import { writeAuditEntry } from "../lib/audit.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const router = Router();
@@ -35,6 +36,14 @@ router.post("/lists/:listId/cards", requireAuth, async (req, res, next) => {
     const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     const rank = await cardRepo.getMaxRank(ctx, list.id);
     const card = await cardRepo.createCard(ctx, list.id, parsed.data.title, rank);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "CARD.CREATE",
+      targetType: "Card",
+      targetId: card.id,
+      result: "SUCCESS",
+    });
     res.status(201).json(card);
   } catch (err) {
     next(err);
@@ -72,6 +81,32 @@ router.patch("/cards/:cardId", requireAuth, async (req, res, next) => {
       ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       ...(assigneeId !== undefined ? { assigneeId } : {}),
     });
+
+    // Assignment is the audit-worthy event the whole thesis hinges on — who
+    // handed what to whom — so it gets its own action name distinct from a
+    // plain field edit, even though both go through this one endpoint.
+    if (assigneeId !== undefined) {
+      await writeAuditEntry({
+        workspaceId: ctx.workspaceId,
+        actorId: ctx.actorId,
+        action: "CARD.ASSIGN",
+        targetType: "Card",
+        targetId: card.id,
+        result: "SUCCESS",
+        resource: assigneeId ?? "unassigned",
+      });
+    }
+    if (Object.keys(rest).length > 0 || dueDate !== undefined) {
+      await writeAuditEntry({
+        workspaceId: ctx.workspaceId,
+        actorId: ctx.actorId,
+        action: "CARD.UPDATE",
+        targetType: "Card",
+        targetId: card.id,
+        result: "SUCCESS",
+      });
+    }
+
     res.json({ ...card, ...parsed.data });
   } catch (err) {
     next(err);
@@ -85,6 +120,14 @@ router.delete("/cards/:cardId", requireAuth, async (req, res, next) => {
 
     const ctx = { workspaceId: card.workspaceId, actorId: req.user!.actorId };
     await cardRepo.deleteCard(ctx, card.id);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "CARD.DELETE",
+      targetType: "Card",
+      targetId: card.id,
+      result: "SUCCESS",
+    });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -109,6 +152,15 @@ router.patch("/cards/:cardId/move", requireAuth, async (req, res, next) => {
     const newRank = calculateRank(beforeRank, afterRank);
 
     await cardRepo.moveCard(ctx, card.id, listId, newRank);
+    await writeAuditEntry({
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "CARD.MOVE",
+      targetType: "Card",
+      targetId: card.id,
+      result: "SUCCESS",
+      resource: listId,
+    });
     res.json({ ...card, listId, rank: newRank });
   } catch (err) {
     next(err);
