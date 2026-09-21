@@ -14,18 +14,18 @@ export async function requireWorkspaceMember(
     if (!workspaceId) {
       return res.status(400).json({ error: "Missing workspaceId parameter" });
     }
-    const workspaceMember = await prisma.workspaceMember.findUnique({
+    const membership = await prisma.membership.findUnique({
       where: {
-        userId_workspaceId: {
-          userId: req.user.id,
+        actorId_workspaceId: {
+          actorId: req.user.actorId,
           workspaceId: workspaceId,
         },
       },
     });
-    if (!workspaceMember) {
+    if (!membership) {
       return res.status(403).json({ error: "Not a member of this workspace" });
     }
-    req.ctx = { workspaceId, userId: req.user.id };
+    req.ctx = { workspaceId, actorId: req.user.actorId };
     next();
   } catch (err) {
     next(err);

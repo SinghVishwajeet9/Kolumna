@@ -4,5 +4,5 @@
 // asking about. See ARCHITECTURE.md §6, Decision 1.
 export type TenantContext = {
   workspaceId: string;
-  userId: string;
+  actorId: string;
 };

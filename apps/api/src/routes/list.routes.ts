@@ -12,8 +12,8 @@ const titleSchema = z.object({ title: z.string().min(1) });
 // Same pattern as /boards/:id — find the board through the user's
 // membership first (proves access + gives us the real workspaceId), THEN
 // build a proper TenantContext to pass into the ctx-scoped list functions.
-async function requireBoardAccess(userId: string, boardId: string) {
-  const board = await boardRepo.findBoardAnyWorkspace(userId, boardId);
+async function requireBoardAccess(actorId: string, boardId: string) {
+  const board = await boardRepo.findBoardAnyWorkspace(actorId, boardId);
   if (!board) throw new NotFoundError("Board not found");
   return board;
 }
@@ -23,8 +23,8 @@ router.post("/boards/:boardId/lists", requireAuth, async (req, res, next) => {
     const parsed = titleSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.message);
 
-    const board = await requireBoardAccess(req.user!.id, req.params.boardId!);
-    const ctx = { workspaceId: board.workspaceId, userId: req.user!.id };
+    const board = await requireBoardAccess(req.user!.actorId, req.params.boardId!);
+    const ctx = { workspaceId: board.workspaceId, actorId: req.user!.actorId };
 
     const rank = await listRepo.getMaxRank(ctx, board.id);
     const list = await listRepo.createList(ctx, board.id, parsed.data.title, rank);
@@ -42,10 +42,10 @@ router.patch("/lists/:listId", requireAuth, async (req, res, next) => {
     // We don't have the boardId here, so find the list's workspace via the
     // same any-workspace-the-user-belongs-to pattern, scoped to List instead
     // of Board — see listRepo.findListAnyWorkspace below.
-    const list = await listRepo.findListAnyWorkspace(req.user!.id, req.params.listId!);
+    const list = await listRepo.findListAnyWorkspace(req.user!.actorId, req.params.listId!);
     if (!list) throw new NotFoundError("List not found");
 
-    const ctx = { workspaceId: list.workspaceId, userId: req.user!.id };
+    const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     await listRepo.updateList(ctx, list.id, parsed.data.title);
     res.json({ ...list, title: parsed.data.title });
   } catch (err) {
@@ -55,10 +55,10 @@ router.patch("/lists/:listId", requireAuth, async (req, res, next) => {
 
 router.delete("/lists/:listId", requireAuth, async (req, res, next) => {
   try {
-    const list = await listRepo.findListAnyWorkspace(req.user!.id, req.params.listId!);
+    const list = await listRepo.findListAnyWorkspace(req.user!.actorId, req.params.listId!);
     if (!list) throw new NotFoundError("List not found");
 
-    const ctx = { workspaceId: list.workspaceId, userId: req.user!.id };
+    const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     await listRepo.deleteList(ctx, list.id);
     res.status(204).send();
   } catch (err) {

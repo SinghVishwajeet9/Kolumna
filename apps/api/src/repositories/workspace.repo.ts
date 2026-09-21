@@ -1,22 +1,32 @@
 import { prisma } from "../lib/prisma.js";
 
-export async function listWorkspacesForUser(userId: string) {
+export async function listWorkspacesForActor(actorId: string) {
   return prisma.workspace.findMany({
     where: {
       members: {
-        some: { userId },
+        some: { actorId },
       },
     },
   });
 }
 
-export async function createWorkspace(userId: string, name: string, slug: string) {
+// Used when assigning a card: the assignee (human or agent) must actually
+// belong to the workspace the card lives in — same tenant-safety idea as
+// everything else, applied to Actor instead of the card/board/list chain.
+export async function isWorkspaceMember(workspaceId: string, actorId: string) {
+  const membership = await prisma.membership.findUnique({
+    where: { actorId_workspaceId: { actorId, workspaceId } },
+  });
+  return membership !== null;
+}
+
+export async function createWorkspace(actorId: string, name: string, slug: string) {
   return prisma.workspace.create({
     data: {
       name,
       slug,
       members: {
-        create: { userId, role: "OWNER" },
+        create: { actorId, role: "OWNER" },
       },
     },
   });

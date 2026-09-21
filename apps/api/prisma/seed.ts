@@ -14,15 +14,20 @@ async function main() {
   await prisma.list.deleteMany();
   await prisma.label.deleteMany();
   await prisma.board.deleteMany();
-  await prisma.workspaceMember.deleteMany();
+  await prisma.membership.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.session.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.actor.deleteMany();
 
   // --- Tenant 1: Acme, owned by Alice --------------------------------
 
+  const aliceActor = await prisma.actor.create({
+    data: { type: "HUMAN", displayName: "Alice" },
+  });
   const alice = await prisma.user.create({
     data: {
+      actorId: aliceActor.id,
       email: "alice@kolumna.dev",
       // Real hashing arrives Day 4 (Argon2/bcrypt via Lucia). This is a
       // placeholder — nothing in this seed data is ever meant to log in.
@@ -36,7 +41,7 @@ async function main() {
       name: "Acme",
       slug: "acme",
       members: {
-        create: { userId: alice.id, role: "OWNER" },
+        create: { actorId: aliceActor.id, role: "OWNER" },
       },
     },
   });
@@ -90,8 +95,12 @@ async function main() {
   // Structurally identical to Acme, deliberately — the isolation test
   // shouldn't need special-cased data to prove separation.
 
+  const bobActor = await prisma.actor.create({
+    data: { type: "HUMAN", displayName: "Bob" },
+  });
   const bob = await prisma.user.create({
     data: {
+      actorId: bobActor.id,
       email: "bob@kolumna.dev",
       hashedPassword: "placeholder",
       name: "Bob",
@@ -103,7 +112,7 @@ async function main() {
       name: "Globex",
       slug: "globex",
       members: {
-        create: { userId: bob.id, role: "OWNER" },
+        create: { actorId: bobActor.id, role: "OWNER" },
       },
     },
   });

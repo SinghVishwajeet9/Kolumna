@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
-  listWorkspacesForUser,
+  listWorkspacesForActor,
   createWorkspace,
 } from "../repositories/workspace.repo.js";
 
@@ -14,7 +14,7 @@ const createWorkspaceSchema = z.object({
 
 router.get("/", requireAuth, async (req, res, next) => {
   try {
-    const workspaces = await listWorkspacesForUser(req.user!.id);
+    const workspaces = await listWorkspacesForActor(req.user!.actorId);
     res.status(200).json(workspaces);
   } catch (err) {
     next(err);
@@ -34,7 +34,7 @@ router.post("/", requireAuth, async (req, res, next) => {
       "-" +
       Math.random().toString(36).substr(2, 9);
 
-    const workspace = await createWorkspace(req.user!.id, name, slug);
+    const workspace = await createWorkspace(req.user!.actorId, name, slug);
     res.status(201).json(workspace);
   } catch (err) {
     next(err);

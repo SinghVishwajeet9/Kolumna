@@ -31,34 +31,50 @@ let listB: { id: string };
 
 beforeAll(async () => {
   // --- Tenant A -------------------------------------------------------
+  const actorA = await prisma.actor.create({
+    data: { type: "HUMAN", displayName: "Tenant A User" },
+  });
   const userA = await prisma.user.create({
-    data: { email: `a-${runId}@test.dev`, hashedPassword: "x", name: "Tenant A User" },
+    data: {
+      actorId: actorA.id,
+      email: `a-${runId}@test.dev`,
+      hashedPassword: "x",
+      name: "Tenant A User",
+    },
   });
   const workspaceA = await prisma.workspace.create({
     data: {
       name: "Tenant A",
       slug: `tenant-a-${runId}`,
-      members: { create: { userId: userA.id, role: "OWNER" } },
+      members: { create: { actorId: actorA.id, role: "OWNER" } },
     },
   });
-  ctxA = { workspaceId: workspaceA.id, userId: userA.id };
+  ctxA = { workspaceId: workspaceA.id, actorId: actorA.id };
 
   boardA = await boardRepo.createBoard(ctxA, "A's Board");
   listA = await listRepo.createList(ctxA, boardA.id, "A's List", 1.0);
   await cardRepo.createCard(ctxA, listA.id, "A's Card", 1.0);
 
   // --- Tenant B — structurally identical, fully separate --------------
+  const actorB = await prisma.actor.create({
+    data: { type: "HUMAN", displayName: "Tenant B User" },
+  });
   const userB = await prisma.user.create({
-    data: { email: `b-${runId}@test.dev`, hashedPassword: "x", name: "Tenant B User" },
+    data: {
+      actorId: actorB.id,
+      email: `b-${runId}@test.dev`,
+      hashedPassword: "x",
+      name: "Tenant B User",
+    },
   });
   const workspaceB = await prisma.workspace.create({
     data: {
       name: "Tenant B",
       slug: `tenant-b-${runId}`,
-      members: { create: { userId: userB.id, role: "OWNER" } },
+      members: { create: { actorId: actorB.id, role: "OWNER" } },
     },
   });
-  ctxB = { workspaceId: workspaceB.id, userId: userB.id };
+  ctxB = { workspaceId: workspaceB.id, actorId: actorB.id };
 
   boardB = await boardRepo.createBoard(ctxB, "B's Board");
   listB = await listRepo.createList(ctxB, boardB.id, "B's List", 1.0);

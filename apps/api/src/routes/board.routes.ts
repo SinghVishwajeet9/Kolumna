@@ -50,7 +50,7 @@ router.post(
 // workspaceId internally once we know it.
 router.get("/boards/:boardId", requireAuth, async (req, res, next) => {
   try {
-    const board = await boardRepo.findBoardAnyWorkspace(req.user!.id, req.params.boardId!);
+    const board = await boardRepo.findBoardAnyWorkspace(req.user!.actorId, req.params.boardId!);
     if (!board) throw new NotFoundError("Board not found");
     res.json(board);
   } catch (err) {
@@ -63,11 +63,11 @@ router.patch("/boards/:boardId", requireAuth, async (req, res, next) => {
     const parsed = titleSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.message);
 
-    const board = await boardRepo.findBoardAnyWorkspace(req.user!.id, req.params.boardId!);
+    const board = await boardRepo.findBoardAnyWorkspace(req.user!.actorId, req.params.boardId!);
     if (!board) throw new NotFoundError("Board not found");
 
     await boardRepo.updateBoard(
-      { workspaceId: board.workspaceId, userId: req.user!.id },
+      { workspaceId: board.workspaceId, actorId: req.user!.actorId },
       board.id,
       parsed.data.title,
     );
@@ -79,11 +79,11 @@ router.patch("/boards/:boardId", requireAuth, async (req, res, next) => {
 
 router.delete("/boards/:boardId", requireAuth, async (req, res, next) => {
   try {
-    const board = await boardRepo.findBoardAnyWorkspace(req.user!.id, req.params.boardId!);
+    const board = await boardRepo.findBoardAnyWorkspace(req.user!.actorId, req.params.boardId!);
     if (!board) throw new NotFoundError("Board not found");
 
     await boardRepo.deleteBoard(
-      { workspaceId: board.workspaceId, userId: req.user!.id },
+      { workspaceId: board.workspaceId, actorId: req.user!.actorId },
       board.id,
     );
     res.status(204).send();

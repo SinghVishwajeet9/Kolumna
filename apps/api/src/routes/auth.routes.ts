@@ -36,8 +36,14 @@ router.post("/signup", async (req, res) => {
   const hashedPassword = await argon2.hash(password);
 
   const { user, workspace } = await prisma.$transaction(async (tx) => {
+    // Every human gets an Actor(HUMAN) backing it — Membership and Card
+    // assignment reference the actor, not the user, from here on.
+    const actor = await tx.actor.create({
+      data: { type: "HUMAN", displayName: name },
+    });
     const user = await tx.user.create({
       data: {
+        actorId: actor.id,
         email,
         hashedPassword,
         name,
@@ -48,7 +54,7 @@ router.post("/signup", async (req, res) => {
         name: `${name}'s Workspace`,
         slug: `${name.toLowerCase().replace(/\s+/g, "-")}-${user.id.slice(0, 6)}`,
         members: {
-          create: { userId: user.id, role: "OWNER" },
+          create: { actorId: actor.id, role: "OWNER" },
         },
       },
     });

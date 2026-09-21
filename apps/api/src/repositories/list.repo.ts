@@ -33,11 +33,11 @@ export async function deleteList(ctx: TenantContext, listId: string) {
   });
 }
 
-export async function findListAnyWorkspace(userId: string, listId: string) {
+export async function findListAnyWorkspace(actorId: string, listId: string) {
   return prisma.list.findFirst({
     where: {
       id: listId,
-      workspace: { members: { some: { userId } } },
+      workspace: { members: { some: { actorId } } },
     },
   });
 }

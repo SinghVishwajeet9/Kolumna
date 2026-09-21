@@ -12,16 +12,39 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ActorType {
+  HUMAN
+  AGENT
+}
+
+// The primitive everything assignable/attributable references — a Human or
+// an Agent, same rights & audit surface, different backing data. Nothing
+// downstream (Membership, Card.assignee, later Agent/AuditEntry) points at
+// User directly anymore; it points here. See kolumna-architecture.md §0, §4.1.
+model Actor {
+  id          String    @id @default(cuid())
+  type        ActorType
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime  @default(now())
+
+  user          User?
+  agent         Agent?
+  ownedAgents   Agent[]      @relation("AgentOwner")
+  memberships   Membership[]
+  assignedCards Card[]
+}
+
 model User {
   id             String   @id @default(cuid())
+  actorId        String   @unique
   email          String   @unique
   hashedPassword String
   name           String
   createdAt      DateTime @default(now())
 
-  sessions         Session[]
-  workspaceMembers WorkspaceMember[]
-  assignedCards    Card[]
+  actor    Actor     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  sessions Session[]
 }
 
 model Session {
@@ -35,15 +58,16 @@ model Session {
 }
 
 model Workspace {
-  id        String            @id @default(cuid())
+  id        String       @id @default(cuid())
   name      String
-  slug      String            @unique
-  createdAt DateTime          @default(now())
-  members   WorkspaceMember[]
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  members   Membership[]
   boards    Board[]
   labels    Label[]
   lists     List[]
   cards     Card[]
+  agents    Agent[]
 }
 
 enum WorkspaceRole {
@@ -52,17 +76,72 @@ enum WorkspaceRole {
   MEMBER
 }
 
-model WorkspaceMember {
+model Membership {
   id          String        @id @default(cuid())
-  userId      String
+  actorId     String
   workspaceId String
   role        WorkspaceRole
   createdAt   DateTime      @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actor     Actor     @relation(fields: [actorId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, workspaceId])
+  @@unique([actorId, workspaceId])
+  @@index([workspaceId])
+}
+
+enum AgentStatus {
+  PROVISIONED // registered, but can't authenticate yet — a human must activate it
+  ACTIVE // can be issued grants/tokens
+  SUSPENDED // temporarily blocked; can be re-activated
+  REVOKED // terminal — permanently dead, all grants killed
+}
+
+// A registered AI principal. Backed by its own Actor (so it can be a
+// Membership and a Card.assignee exactly like a human), but never has a
+// password — it authenticates to the gateway via OAuth 2.1 client
+// credentials (clientId + clientSecret) instead. See
+// kolumna-architecture.md §4.1 and §6.
+model Agent {
+  id                 String      @id @default(cuid())
+  actorId            String      @unique
+  workspaceId        String
+  ownerActorId       String // which human registered/owns this agent
+  modelProvider      String // BYO — "anthropic" | "openai" | ... (no adapter yet, just recorded)
+  capabilities       Json // skills/tools this agent offers, free-form for now
+  status             AgentStatus @default(PROVISIONED)
+  clientId           String      @unique
+  hashedClientSecret String
+  createdAt          DateTime    @default(now())
+
+  actor     Actor        @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     Actor        @relation("AgentOwner", fields: [ownerActorId], references: [id])
+  grants    AgentGrant[]
+
+  @@index([workspaceId])
+}
+
+// One issued access token. Same "never store the raw secret" pattern as
+// Session (lib/session.ts) — tokenHash is what's persisted, the raw token is
+// only ever seen once, at issuance. expiresAt is short-lived by design: this
+// is the "ephemeral agent, permanent credential" bug fix — access dies on
+// schedule with no separate revocation step required (though explicit
+// revocation, e.g. via Agent.status, is also supported).
+model AgentGrant {
+  id              String    @id @default(cuid())
+  agentId         String
+  workspaceId     String
+  scopes          Json // string[] of granted scope names
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  issuedByActorId String
+  createdAt       DateTime  @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
   @@index([workspaceId])
 }
 
@@ -103,7 +182,7 @@ model Card {
   createdAt   DateTime    @default(now())
   cardLabels  CardLabel[]
   assigneeId  String?
-  assignee    User?       @relation(fields: [assigneeId], references: [id])
+  assignee    Actor?      @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
   list        List        @relation(fields: [listId], references: [id], onDelete: Cascade)
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

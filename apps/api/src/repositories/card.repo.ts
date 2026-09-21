@@ -19,16 +19,21 @@ export async function createCard(
   });
 }
 
-export async function findCardAnyWorkspace(userId: string, cardId: string) {
+export async function findCardAnyWorkspace(actorId: string, cardId: string) {
   return prisma.card.findFirst({
-    where: { id: cardId, workspace: { members: { some: { userId } } } },
+    where: { id: cardId, workspace: { members: { some: { actorId } } } },
   });
 }
 
 export async function updateCard(
   ctx: TenantContext,
   cardId: string,
-  data: { title?: string; description?: string; dueDate?: Date | null },
+  data: {
+    title?: string;
+    description?: string;
+    dueDate?: Date | null;
+    assigneeId?: string | null;
+  },
 ) {
   return prisma.card.updateMany({
     where: { id: cardId, workspaceId: ctx.workspaceId },

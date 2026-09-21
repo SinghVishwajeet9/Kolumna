@@ -44,11 +44,11 @@ export async function getBoardWithContents(ctx: TenantContext, boardId: string) 
 // from the client, filter through the relation: "only boards belonging to
 // a workspace where THIS user is a member." Same tenant-safety guarantee
 // as the ctx pattern, just expressed via a relation instead of a known ID.
-export async function findBoardAnyWorkspace(userId: string, boardId: string) {
+export async function findBoardAnyWorkspace(actorId: string, boardId: string) {
   return prisma.board.findFirst({
     where: {
       id: boardId,
-      workspace: { members: { some: { userId } } },
+      workspace: { members: { some: { actorId } } },
     },
     include: {
       lists: {
