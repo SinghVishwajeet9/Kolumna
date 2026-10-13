@@ -10,10 +10,17 @@
 import { prisma } from "../lib/prisma.js";
 import type { TenantContext } from "../lib/tenant-context.js";
 import { generateClientId, generateClientSecret, hashSecret } from "./credentials.js";
+import { appendAuditEntry, AUDIT_TX_OPTIONS } from "../lib/audit.js";
+import type { Scope } from "./scopes.js";
 
 export async function createAgent(
   ctx: TenantContext,
-  params: { displayName: string; modelProvider: string; capabilities: unknown },
+  params: {
+    displayName: string;
+    modelProvider: string;
+    capabilities: unknown;
+    allowedScopes: Scope[];
+  },
 ) {
   const clientId = generateClientId();
   const clientSecret = generateClientSecret();
@@ -30,6 +37,7 @@ export async function createAgent(
         ownerActorId: ctx.actorId,
         modelProvider: params.modelProvider,
         capabilities: params.capabilities as object,
+        allowedScopes: params.allowedScopes,
         clientId,
         hashedClientSecret,
       },
@@ -37,8 +45,19 @@ export async function createAgent(
     await tx.membership.create({
       data: { actorId: actor.id, workspaceId: ctx.workspaceId, role: "MEMBER" },
     });
+    // The scope ceiling is the governance-relevant fact of a registration, so
+    // it goes in the audit entry — and in the same transaction as the agent.
+    await appendAuditEntry(tx, {
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      action: "AGENT.REGISTER",
+      targetType: "Agent",
+      targetId: agent.id,
+      result: "SUCCESS",
+      resource: JSON.stringify({ allowedScopes: params.allowedScopes }),
+    });
     return agent;
-  });
+  }, AUDIT_TX_OPTIONS);
 
   // clientSecret is returned ONLY here — it is never retrievable again.
   return { agent, clientId, clientSecret };

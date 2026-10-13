@@ -10,8 +10,11 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import * as agentRepo from "./agent.repo.js";
 import { revokeAllGrantsForAgent } from "./agentGrant.repo.js";
-import { writeAuditEntry } from "../lib/audit.js";
+import { appendAuditEntry, writeAuditEntry, AUDIT_TX_OPTIONS } from "../lib/audit.js";
+import { prisma } from "../lib/prisma.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
+import { scopeListSchema } from "./scopes.js";
+import { generateClientSecret, hashSecret } from "./credentials.js";
 
 const router = Router();
 
@@ -19,6 +22,9 @@ const registerSchema = z.object({
   displayName: z.string().min(1),
   modelProvider: z.string().min(1),
   capabilities: z.unknown().optional().default({}),
+  // The ceiling. The registering human decides what this agent may EVER be
+  // granted; the agent can't widen it at token time.
+  allowedScopes: scopeListSchema,
 });
 
 router.post(
@@ -30,16 +36,8 @@ router.post(
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.message);
 
+      // createAgent writes the AGENT.REGISTER audit entry in its own transaction.
       const { agent, clientId, clientSecret } = await agentRepo.createAgent(req.ctx!, parsed.data);
-
-      await writeAuditEntry({
-        workspaceId: req.ctx!.workspaceId,
-        actorId: req.ctx!.actorId,
-        action: "AGENT.REGISTER",
-        targetType: "Agent",
-        targetId: agent.id,
-        result: "SUCCESS",
-      });
 
       // clientSecret is shown exactly once, here — the caller must store it
       // now. The server never has it in recoverable form again.
@@ -49,6 +47,7 @@ router.post(
           actorId: agent.actorId,
           status: agent.status,
           modelProvider: agent.modelProvider,
+          allowedScopes: agent.allowedScopes,
         },
         clientId,
         clientSecret,
@@ -72,6 +71,7 @@ router.get(
           actorId: a.actorId, // this is what Card.assigneeId expects
           displayName: a.actor.displayName,
           modelProvider: a.modelProvider,
+          allowedScopes: a.allowedScopes,
           status: a.status,
           clientId: a.clientId,
           createdAt: a.createdAt,
@@ -127,6 +127,7 @@ router.patch(
 
       await agentRepo.updateAgentStatus(req.ctx!, agent.id, "SUSPENDED");
       await revokeAllGrantsForAgent(agent.id); // suspension kills live access immediately
+      const rejected = await rejectPendingProposals(agent.actorId, req.ctx!.actorId);
       await writeAuditEntry({
         workspaceId: req.ctx!.workspaceId,
         actorId: req.ctx!.actorId,
@@ -134,6 +135,7 @@ router.patch(
         targetType: "Agent",
         targetId: agent.id,
         result: "SUCCESS",
+        resource: `${rejected} pending proposals rejected`,
       });
       res.json({ id: agent.id, status: "SUSPENDED" });
     } catch (err) {
@@ -153,6 +155,7 @@ router.patch(
 
       await agentRepo.updateAgentStatus(req.ctx!, agent.id, "REVOKED");
       await revokeAllGrantsForAgent(agent.id); // terminal — no path back from here
+      const rejected = await rejectPendingProposals(agent.actorId, req.ctx!.actorId);
       await writeAuditEntry({
         workspaceId: req.ctx!.workspaceId,
         actorId: req.ctx!.actorId,
@@ -160,6 +163,7 @@ router.patch(
         targetType: "Agent",
         targetId: agent.id,
         result: "SUCCESS",
+        resource: `${rejected} pending proposals rejected`,
       });
       res.json({ id: agent.id, status: "REVOKED" });
     } catch (err) {
@@ -167,5 +171,58 @@ router.patch(
     }
   },
 );
+
+// The secret now lives in client config files (Claude Code, Codex…), so it
+// must be replaceable if one leaks. Rotating kills every live grant too: the
+// old secret, and any session it opened, stop working on the next call.
+router.post(
+  "/workspaces/:workspaceId/agents/:agentId/rotate-secret",
+  requireAuth,
+  requireWorkspaceMember,
+  async (req, res, next) => {
+    try {
+      const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
+      if (!agent) throw new NotFoundError("Agent not found");
+      if (agent.status === "REVOKED") {
+        throw new ValidationError("A revoked agent's secret can't be rotated");
+      }
+
+      const clientSecret = generateClientSecret();
+      await prisma.$transaction(async (tx) => {
+        await tx.agent.update({
+          where: { id: agent.id },
+          data: { hashedClientSecret: hashSecret(clientSecret) },
+        });
+        await tx.agentGrant.updateMany({
+          where: { agentId: agent.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await appendAuditEntry(tx, {
+          workspaceId: req.ctx!.workspaceId,
+          actorId: req.ctx!.actorId,
+          action: "AGENT.ROTATE_SECRET",
+          targetType: "Agent",
+          targetId: agent.id,
+          result: "SUCCESS",
+        });
+      }, AUDIT_TX_OPTIONS);
+
+      // Shown exactly once, like at registration.
+      res.json({ id: agent.id, clientId: agent.clientId, clientSecret });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// An agent that's been cut off shouldn't leave plans waiting for approval —
+// approving one later would act on its behalf after its authority ended.
+async function rejectPendingProposals(agentActorId: string, reviewerActorId: string) {
+  const { count } = await prisma.subtaskProposal.updateMany({
+    where: { proposedByActorId: agentActorId, status: "PENDING" },
+    data: { status: "REJECTED", reviewedByActorId: reviewerActorId, reviewedAt: new Date() },
+  });
+  return count;
+}
 
 export default router;

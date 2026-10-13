@@ -12,6 +12,9 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "./prisma.js";
+import type { Prisma } from "../generated/prisma/client.js";
+
+export type Tx = Prisma.TransactionClient;
 
 export const GENESIS_HASH = "0".repeat(64);
 
@@ -92,50 +95,53 @@ function sha256(value: string): string {
 // WORKSPACE for the length of this transaction — different workspaces never
 // block each other — and releases automatically on commit/rollback.
 export async function writeAuditEntry(input: AuditEntryInput) {
-  return prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.workspaceId}))`;
+  return prisma.$transaction((tx) => appendAuditEntry(tx, input), AUDIT_TX_OPTIONS);
+}
 
-      const last = await tx.auditEntry.findFirst({
-        where: { workspaceId: input.workspaceId },
-        orderBy: { seq: "desc" },
-      });
+// Writers queued on the lock wait INSIDE their transaction, so the default
+// 5s interactive-transaction timeout is too tight under bursts.
+export const AUDIT_TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
-      const seq = (last?.seq ?? 0) + 1;
-      const prevHash = last?.hash ?? GENESIS_HASH;
-      const createdAt = new Date();
+// Same write, but inside a transaction the CALLER owns — so the change being
+// audited and its audit entry commit or roll back together (roadmap G7).
+export async function appendAuditEntry(tx: Tx, input: AuditEntryInput) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.workspaceId}))`;
 
-      const normalized = {
-        workspaceId: input.workspaceId,
-        seq,
-        actorId: input.actorId,
-        onBehalfOfActorId: input.onBehalfOfActorId ?? null,
-        action: input.action,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        toolInvoked: input.toolInvoked ?? null,
-        resource: input.resource ?? null,
-        result: input.result,
-        reasoningSummary: input.reasoningSummary ?? null,
-        confidence: input.confidence ?? null,
-        model: input.model ?? null,
-        tokensIn: input.tokensIn ?? null,
-        tokensOut: input.tokensOut ?? null,
-        costUsd: input.costUsd ?? null,
-        prevHash,
-        createdAt: createdAt.toISOString(),
-      };
+  const last = await tx.auditEntry.findFirst({
+    where: { workspaceId: input.workspaceId },
+    orderBy: { seq: "desc" },
+  });
 
-      const hash = sha256(prevHash + canonicalize(normalized));
+  const seq = (last?.seq ?? 0) + 1;
+  const prevHash = last?.hash ?? GENESIS_HASH;
+  const createdAt = new Date();
 
-      return tx.auditEntry.create({
-        data: { ...normalized, createdAt, hash },
-      });
-    },
-    // Writers queued on the lock wait INSIDE their transaction, so the
-    // default 5s interactive-transaction timeout is too tight under bursts.
-    { maxWait: 10_000, timeout: 20_000 },
-  );
+  const normalized = {
+    workspaceId: input.workspaceId,
+    seq,
+    actorId: input.actorId,
+    onBehalfOfActorId: input.onBehalfOfActorId ?? null,
+    action: input.action,
+    targetType: input.targetType,
+    targetId: input.targetId,
+    toolInvoked: input.toolInvoked ?? null,
+    resource: input.resource ?? null,
+    result: input.result,
+    reasoningSummary: input.reasoningSummary ?? null,
+    confidence: input.confidence ?? null,
+    model: input.model ?? null,
+    tokensIn: input.tokensIn ?? null,
+    tokensOut: input.tokensOut ?? null,
+    costUsd: input.costUsd ?? null,
+    prevHash,
+    createdAt: createdAt.toISOString(),
+  };
+
+  const hash = sha256(prevHash + canonicalize(normalized));
+
+  return tx.auditEntry.create({
+    data: { ...normalized, createdAt, hash },
+  });
 }
 
 /** Reconstructs lineage for one target — the query an "explain your work"

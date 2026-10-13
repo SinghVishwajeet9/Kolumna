@@ -36,6 +36,7 @@ model Actor {
 
   auditEntries           AuditEntry[] @relation("AuditActor")
   auditEntriesOnBehalfOf AuditEntry[] @relation("AuditOnBehalfOf")
+  comments               Comment[]    @relation("CommentAuthor")
 }
 
 model User {
@@ -73,6 +74,8 @@ model Workspace {
   agents           Agent[]
   auditEntries     AuditEntry[]
   subtaskProposals SubtaskProposal[]
+  comments         Comment[]
+  checklistItems   ChecklistItem[]
 }
 
 enum WorkspaceRole {
@@ -114,6 +117,7 @@ model Agent {
   ownerActorId       String // which human registered/owns this agent
   modelProvider      String // BYO — "anthropic" | "openai" | ... (no adapter yet, just recorded)
   capabilities       Json // skills/tools this agent offers, free-form for now
+  allowedScopes      Json        @default("[]") // ceiling set by the registering human; every grant must be a subset
   status             AgentStatus @default(PROVISIONED)
   clientId           String      @unique
   hashedClientSecret String
@@ -133,16 +137,23 @@ model Agent {
 // is the "ephemeral agent, permanent credential" bug fix — access dies on
 // schedule with no separate revocation step required (though explicit
 // revocation, e.g. via Agent.status, is also supported).
+enum AgentGrantKind {
+  CLIENT_CREDENTIALS // POST /agent-auth/token — an external agent asked for a bearer token
+  MCP_SESSION // a connected MCP client (Claude Code, Codex…), reused across its requests
+  HOSTED_RUN // Kolumna's own worker running the agent (Path B)
+}
+
 model AgentGrant {
-  id              String    @id @default(cuid())
+  id              String         @id @default(cuid())
+  kind            AgentGrantKind @default(CLIENT_CREDENTIALS)
   agentId         String
   workspaceId     String
   scopes          Json // string[] of granted scope names
-  tokenHash       String    @unique
+  tokenHash       String         @unique
   expiresAt       DateTime
   revokedAt       DateTime?
   issuedByActorId String
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime       @default(now())
 
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
@@ -167,6 +178,7 @@ model SubtaskProposal {
   workspaceId       String
   cardId            String // the parent ticket these subtasks were proposed for
   proposedByActorId String // the agent's actor id
+  runId             String?        @unique // the hosted run that made it — a retried run finds this instead of duplicating
   subtasks          Json // array of { title: string } — the model's proposed breakdown
   reasoningSummary  String? // the model's own "why" — same idea as AuditEntry's field
   status            ProposalStatus @default(PENDING)
@@ -259,10 +271,54 @@ model Card {
   list             List              @relation(fields: [listId], references: [id], onDelete: Cascade)
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   subtaskProposals SubtaskProposal[]
+  comments         Comment[]
+  checklistItems   ChecklistItem[]
 
   @@index([listId])
   @@index([workspaceId])
   @@index([assigneeId])
+}
+
+// A note on a card from a human or an agent — how a connected agent reports
+// what it's doing. Phase 7 grows this into per-card threads.
+model Comment {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  cardId        String
+  authorActorId String
+  body          String
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  card      Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author    Actor     @relation("CommentAuthor", fields: [authorActorId], references: [id])
+
+  @@index([cardId])
+  @@index([workspaceId])
+}
+
+// The steps of a card. % complete is COMPUTED from these (done / total) —
+// never a number an agent types in. Created by an agent directly or from an
+// approved SubtaskProposal (sourceProposalId).
+model ChecklistItem {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  cardId           String
+  title            String
+  rank             Float
+  done             Boolean   @default(false)
+  doneAt           DateTime?
+  doneByActorId    String?
+  evidenceUrl      String? // commit / branch / PR / test run backing the tick — verified in Phase 8
+  createdByActorId String
+  sourceProposalId String?
+  createdAt        DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  card      Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([workspaceId])
 }
 
 model Label {

@@ -6,6 +6,7 @@ import * as listRepo from "../repositories/list.repo.js";
 import { isWorkspaceMember } from "../repositories/workspace.repo.js";
 import { calculateRank } from "../services/ranking.js";
 import { writeAuditEntry } from "../lib/audit.js";
+import { prisma } from "../lib/prisma.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const router = Router();
@@ -74,6 +75,10 @@ router.patch("/cards/:cardId", requireAuth, async (req, res, next) => {
     if (assigneeId) {
       const isMember = await isWorkspaceMember(ctx.workspaceId, assigneeId);
       if (!isMember) throw new ValidationError("Assignee is not a member of this workspace");
+      const agent = await prisma.agent.findUnique({ where: { actorId: assigneeId } });
+      if (agent && agent.status !== "ACTIVE") {
+        throw new ValidationError(`Can't assign work to an agent that is ${agent.status}`);
+      }
     }
 
     await cardRepo.updateCard(ctx, card.id, {

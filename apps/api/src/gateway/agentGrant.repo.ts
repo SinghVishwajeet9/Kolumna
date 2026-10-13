@@ -5,6 +5,7 @@
 
 import { prisma } from "../lib/prisma.js";
 import { generateAccessToken, hashSecret } from "./credentials.js";
+import type { AgentGrantKind } from "../generated/prisma/enums.js";
 
 export async function createGrant(params: {
   agentId: string;
@@ -12,6 +13,7 @@ export async function createGrant(params: {
   scopes: string[];
   ttlSeconds: number;
   issuedByActorId: string;
+  kind?: AgentGrantKind;
 }) {
   const token = generateAccessToken();
   const tokenHash = hashSecret(token);
@@ -19,6 +21,7 @@ export async function createGrant(params: {
 
   const grant = await prisma.agentGrant.create({
     data: {
+      kind: params.kind ?? "CLIENT_CREDENTIALS",
       agentId: params.agentId,
       workspaceId: params.workspaceId,
       scopes: params.scopes,

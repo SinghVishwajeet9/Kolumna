@@ -16,17 +16,17 @@ import { createGrant } from "./agentGrant.repo.js";
 import { hashSecret } from "./credentials.js";
 import { ValidationError } from "../lib/errors.js";
 import { requireAgentAuth } from "../middleware/requireAgentAuth.js";
+import { isSubset, parseScopes, scopeListSchema } from "./scopes.js";
 
 const router = Router();
 
-const ALLOWED_SCOPES = ["board:read", "card:read", "card:write"] as const;
 const DEFAULT_TTL_SECONDS = 60 * 60; // 1 hour
 const MAX_TTL_SECONDS = 60 * 60 * 24; // 24 hours — no sprint/project to tie expiry to yet
 
 const tokenRequestSchema = z.object({
   clientId: z.string().min(1),
   clientSecret: z.string().min(1),
-  scopes: z.array(z.enum(ALLOWED_SCOPES)).min(1),
+  scopes: scopeListSchema,
   ttlSeconds: z.number().int().positive().max(MAX_TTL_SECONDS).optional(),
 });
 
@@ -45,6 +45,10 @@ router.post("/agent-auth/token", async (req, res, next) => {
     }
     if (agent.status !== "ACTIVE") {
       return res.status(403).json({ error: "Agent is not active" });
+    }
+    // The ceiling check: an agent can ask for less than it's allowed, never more.
+    if (!isSubset(scopes, parseScopes(agent.allowedScopes))) {
+      return res.status(403).json({ error: "Requested scopes exceed this agent's allowed scopes" });
     }
 
     const { grant, token } = await createGrant({
