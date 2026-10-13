@@ -53,7 +53,18 @@ export async function findBoardAnyWorkspace(actorId: string, boardId: string) {
     include: {
       lists: {
         orderBy: { rank: "asc" },
-        include: { cards: { orderBy: { rank: "asc" } } },
+        include: {
+          cards: {
+            orderBy: { rank: "asc" },
+            // What a card face shows: who has it (and whether that's an
+            // agent), checklist progress, and how much discussion.
+            include: {
+              assignee: { select: { id: true, displayName: true, type: true } },
+              checklistItems: { select: { done: true } },
+              _count: { select: { comments: true } },
+            },
+          },
+        },
       },
     },
   });

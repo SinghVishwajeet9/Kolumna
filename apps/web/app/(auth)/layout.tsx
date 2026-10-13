@@ -1,11 +1,11 @@
 import Image from "next/image";
 
-// Shared chrome for /login and /signup: the same dark grid-field ground as
-// the landing page, the auth card centered on it, and the pixel-sparkles in
+// Shared chrome for /login and /signup: a plain dark ground (same palette as
+// the landing page), the auth card centered on it, and the pixel-sparkles in
 // two corners. Each page renders its own card into the middle.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid-field relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-16">
+    <div className="relative flex min-h-screen bg-bg items-center justify-center overflow-hidden px-6 py-16">
       <Image
         src="/star.png"
         alt=""

@@ -26,6 +26,13 @@ const CARD_COLORS = [
   "#d9f99d",
 ];
 
+async function fetchBoards(): Promise<{ workspace: Workspace | null; boards: Board[] }> {
+  const workspaces = await api.get<Workspace[]>("/workspaces");
+  const workspace = workspaces[0] ?? null;
+  if (!workspace) return { workspace: null, boards: [] };
+  return { workspace, boards: await api.get<Board[]>(`/workspaces/${workspace.id}/boards`) };
+}
+
 export default function BoardsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -44,24 +51,30 @@ export default function BoardsPage() {
     }
   }, [authLoading, user, router]);
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      api.get<Workspace[]>("/workspaces").then((workspaces) => {
-        if (workspaces.length > 0) {
-          setWorkspace(workspaces[0]);
-        }
-      });
-    }
-  }, [authLoading, user]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Every outcome ends with loading=false — before, a failed request (API
+  // restarting, DB unreachable) or a user with no workspace left the page on
+  // "Loading…" forever. Fetching and applying are split so the effect only
+  // sets state from inside the promise callbacks.
+  function load() {
+    return fetchBoards().then(
+      ({ workspace, boards }) => {
+        setWorkspace(workspace);
+        setBoards(boards);
+        setError(workspace ? null : "You don't have a workspace yet.");
+        setLoading(false);
+      },
+      () => {
+        setError("Couldn't load your boards. Is the API running?");
+        setLoading(false);
+      },
+    );
+  }
 
   useEffect(() => {
-    if (workspace) {
-      api.get<Board[]>(`/workspaces/${workspace.id}/boards`).then((data) => {
-        setBoards(data);
-        setLoading(false);
-      });
-    }
-  }, [workspace]);
+    if (!authLoading && user) void load();
+  }, [authLoading, user]);
 
   async function handleCreateBoard(e: React.FormEvent) {
     e.preventDefault();
@@ -84,7 +97,7 @@ export default function BoardsPage() {
   }
 
   return (
-    <main className="grid-field min-h-[calc(100vh-64px)]">
+    <main className="min-h-[calc(100vh-64px)] bg-bg">
       <div className="mx-auto max-w-5xl px-6 py-14 lg:py-20">
         <div className="mb-12 flex items-end justify-between gap-4">
           <div>
@@ -114,7 +127,25 @@ export default function BoardsPage() {
           </p>
         )}
 
-        {!loading && boards.length === 0 && (
+        {!loading && error && (
+          <div className="flex items-center gap-4 text-[15px] text-muted">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                setError(null);
+                void load();
+              }}
+              className="text-accent hover:underline"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              retry
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && boards.length === 0 && (
           <div
             className="relative border border-dashed border-line px-8 py-16 text-center"
             style={{ borderRadius: "14px" }}
@@ -127,7 +158,7 @@ export default function BoardsPage() {
           </div>
         )}
 
-        {!loading && boards.length > 0 && (
+        {!loading && !error && boards.length > 0 && (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {boards.map((board, i) => {
               const color = CARD_COLORS[i % CARD_COLORS.length];
