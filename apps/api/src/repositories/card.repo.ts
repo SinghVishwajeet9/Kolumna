@@ -80,6 +80,14 @@ export async function moveCard(
   listId: string,
   rank: number,
 ) {
+  // The target listId comes from the client. Filtering the CARD by
+  // workspaceId isn't enough — without this check a card could be moved into
+  // another tenant's list and show up on their board.
+  const targetList = await prisma.list.findFirst({
+    where: { id: listId, workspaceId: ctx.workspaceId },
+  });
+  if (!targetList) return { count: 0 };
+
   return prisma.card.updateMany({
     where: { id: cardId, workspaceId: ctx.workspaceId },
     data: { listId, rank },

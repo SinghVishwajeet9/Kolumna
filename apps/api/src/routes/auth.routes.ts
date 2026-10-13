@@ -52,7 +52,10 @@ router.post("/signup", async (req, res) => {
     const workspace = await tx.workspace.create({
       data: {
         name: `${name}'s Workspace`,
-        slug: `${name.toLowerCase().replace(/\s+/g, "-")}-${user.id.slice(0, 6)}`,
+        // The END of a cuid is random; the START is a timestamp that only
+        // changes every ~46s, so a start-based suffix collides when two
+        // people with the same name sign up close together.
+        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${user.id.slice(-8)}`,
         members: {
           create: { actorId: actor.id, role: "OWNER" },
         },

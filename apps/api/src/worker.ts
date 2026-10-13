@@ -31,4 +31,15 @@ worker.on("failed", (job, err) => {
   console.error(`[worker] job ${job?.id} failed:`, err.message);
 });
 
+// Graceful shutdown: let the in-flight job finish (or hand it back) instead
+// of dying mid-run and leaving it stuck "active" until stall detection.
+async function shutdown(signal: string) {
+  console.log(`[worker] ${signal} received, closing...`);
+  await worker.close();
+  await redisConnection.quit();
+  process.exit(0);
+}
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
 console.log(`[worker] listening for jobs on "${AGENT_RUN_QUEUE_NAME}"`);

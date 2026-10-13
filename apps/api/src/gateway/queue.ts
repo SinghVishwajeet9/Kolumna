@@ -24,5 +24,9 @@ export const agentRunQueue = new Queue<AgentRunJobData>(AGENT_RUN_QUEUE_NAME, {
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: "exponential", delay: 2000 },
+    // Without these, BullMQ keeps every finished job in Redis forever.
+    // Failed jobs are kept longer — they're what you debug from.
+    removeOnComplete: { age: 24 * 60 * 60 },
+    removeOnFail: { age: 7 * 24 * 60 * 60 },
   },
 });

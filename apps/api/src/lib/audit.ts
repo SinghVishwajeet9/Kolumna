@@ -86,51 +86,56 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-// NOTE: reads the latest seq/hash and writes the next one inside a single
-// transaction — correct under this app's realistic write volume, but not
-// safe against two truly concurrent writers racing on the same workspace (a
-// unique constraint on (workspaceId, seq) means a race fails loudly rather
-// than corrupting the chain, but it isn't retried here). A real production
-// version would serialize this with a per-workspace advisory lock. Named as
-// a known simplification, not an oversight — see PHASE_2.md.
+// Read-latest-then-write-next is a race between concurrent writers (the API
+// and the worker are separate processes, and one process interleaves
+// requests across awaits). pg_advisory_xact_lock serializes writers PER
+// WORKSPACE for the length of this transaction — different workspaces never
+// block each other — and releases automatically on commit/rollback.
 export async function writeAuditEntry(input: AuditEntryInput) {
-  return prisma.$transaction(async (tx) => {
-    const last = await tx.auditEntry.findFirst({
-      where: { workspaceId: input.workspaceId },
-      orderBy: { seq: "desc" },
-    });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.workspaceId}))`;
 
-    const seq = (last?.seq ?? 0) + 1;
-    const prevHash = last?.hash ?? GENESIS_HASH;
-    const createdAt = new Date();
+      const last = await tx.auditEntry.findFirst({
+        where: { workspaceId: input.workspaceId },
+        orderBy: { seq: "desc" },
+      });
 
-    const normalized = {
-      workspaceId: input.workspaceId,
-      seq,
-      actorId: input.actorId,
-      onBehalfOfActorId: input.onBehalfOfActorId ?? null,
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      toolInvoked: input.toolInvoked ?? null,
-      resource: input.resource ?? null,
-      result: input.result,
-      reasoningSummary: input.reasoningSummary ?? null,
-      confidence: input.confidence ?? null,
-      model: input.model ?? null,
-      tokensIn: input.tokensIn ?? null,
-      tokensOut: input.tokensOut ?? null,
-      costUsd: input.costUsd ?? null,
-      prevHash,
-      createdAt: createdAt.toISOString(),
-    };
+      const seq = (last?.seq ?? 0) + 1;
+      const prevHash = last?.hash ?? GENESIS_HASH;
+      const createdAt = new Date();
 
-    const hash = sha256(prevHash + canonicalize(normalized));
+      const normalized = {
+        workspaceId: input.workspaceId,
+        seq,
+        actorId: input.actorId,
+        onBehalfOfActorId: input.onBehalfOfActorId ?? null,
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        toolInvoked: input.toolInvoked ?? null,
+        resource: input.resource ?? null,
+        result: input.result,
+        reasoningSummary: input.reasoningSummary ?? null,
+        confidence: input.confidence ?? null,
+        model: input.model ?? null,
+        tokensIn: input.tokensIn ?? null,
+        tokensOut: input.tokensOut ?? null,
+        costUsd: input.costUsd ?? null,
+        prevHash,
+        createdAt: createdAt.toISOString(),
+      };
 
-    return tx.auditEntry.create({
-      data: { ...normalized, createdAt, hash },
-    });
-  });
+      const hash = sha256(prevHash + canonicalize(normalized));
+
+      return tx.auditEntry.create({
+        data: { ...normalized, createdAt, hash },
+      });
+    },
+    // Writers queued on the lock wait INSIDE their transaction, so the
+    // default 5s interactive-transaction timeout is too tight under bursts.
+    { maxWait: 10_000, timeout: 20_000 },
+  );
 }
 
 /** Reconstructs lineage for one target — the query an "explain your work"

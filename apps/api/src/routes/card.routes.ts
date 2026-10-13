@@ -151,7 +151,8 @@ router.patch("/cards/:cardId/move", requireAuth, async (req, res, next) => {
     const { beforeRank, afterRank } = await cardRepo.getNeighborRanks(ctx, beforeId, afterId);
     const newRank = calculateRank(beforeRank, afterRank);
 
-    await cardRepo.moveCard(ctx, card.id, listId, newRank);
+    const moved = await cardRepo.moveCard(ctx, card.id, listId, newRank);
+    if (moved.count === 0) throw new NotFoundError("List not found");
     await writeAuditEntry({
       workspaceId: ctx.workspaceId,
       actorId: ctx.actorId,

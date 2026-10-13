@@ -97,6 +97,33 @@ describe("audit chain", () => {
     expect(lineage.map((e) => e.action)).toEqual(["CARD.CREATE", "CARD.ASSIGN", "CARD.MOVE"]);
   });
 
+  // The API and the worker are separate processes, and even one process
+  // interleaves concurrent requests across awaits — so two writers WILL read
+  // the same "latest seq" at some point. Every write must still land, with a
+  // gap-free, valid chain.
+  it("concurrent writes in one workspace all land and keep the chain valid", async () => {
+    const before = await prisma.auditEntry.count({ where: { workspaceId } });
+
+    await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        writeAuditEntry({
+          workspaceId,
+          actorId,
+          action: "CARD.UPDATE",
+          targetType: "Card",
+          targetId: `concurrent-${i}`,
+          result: "SUCCESS",
+        }),
+      ),
+    );
+
+    const after = await prisma.auditEntry.count({ where: { workspaceId } });
+    expect(after - before).toBe(5);
+
+    const result = await verifyChain(workspaceId);
+    expect(result.valid).toBe(true);
+  });
+
   // The actual proof this is tamper-EVIDENT, not just tamper-resistant in
   // theory: directly edit a past row (bypassing the writer, the way an
   // attacker with raw DB access would) and confirm verification catches it.

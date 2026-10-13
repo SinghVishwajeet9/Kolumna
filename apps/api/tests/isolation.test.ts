@@ -28,6 +28,8 @@ let boardA: { id: string };
 let boardB: { id: string };
 let listA: { id: string };
 let listB: { id: string };
+let cardA: { id: string };
+let actorIds: string[] = [];
 
 beforeAll(async () => {
   // --- Tenant A -------------------------------------------------------
@@ -53,7 +55,7 @@ beforeAll(async () => {
 
   boardA = await boardRepo.createBoard(ctxA, "A's Board");
   listA = await listRepo.createList(ctxA, boardA.id, "A's List", 1.0);
-  await cardRepo.createCard(ctxA, listA.id, "A's Card", 1.0);
+  cardA = await cardRepo.createCard(ctxA, listA.id, "A's Card", 1.0);
 
   // --- Tenant B — structurally identical, fully separate --------------
   const actorB = await prisma.actor.create({
@@ -75,6 +77,7 @@ beforeAll(async () => {
     },
   });
   ctxB = { workspaceId: workspaceB.id, actorId: actorB.id };
+  actorIds = [actorA.id, actorB.id];
 
   boardB = await boardRepo.createBoard(ctxB, "B's Board");
   listB = await listRepo.createList(ctxB, boardB.id, "B's List", 1.0);
@@ -85,7 +88,9 @@ afterAll(async () => {
   // Deleting the workspaces cascades to their boards/lists/cards/members
   // (onDelete: Cascade on every workspace relation — see schema.prisma).
   await prisma.workspace.deleteMany({ where: { slug: { contains: runId } } });
-  await prisma.user.deleteMany({ where: { email: { contains: runId } } });
+  // Actor is the parent of User — deleting a User leaves its Actor behind, so
+  // delete the actors themselves (cascades to their User rows).
+  await prisma.actor.deleteMany({ where: { id: { in: actorIds } } });
 });
 
 describe("tenant isolation", () => {
@@ -119,5 +124,17 @@ describe("tenant isolation", () => {
   it("listByListId returns nothing when given another tenant's list ID", async () => {
     const cards = await cardRepo.listByListId(ctxA, listB.id);
     expect(cards).toHaveLength(0);
+  });
+
+  // A cross-tenant WRITE, not just a read: the target listId comes from the
+  // request body, so A must not be able to move its own card into B's list —
+  // which would make A's card appear on B's board.
+  it("moveCard cannot move a card into another tenant's list", async () => {
+    const result = await cardRepo.moveCard(ctxA, cardA.id, listB.id, 5.0);
+    expect(result.count).toBe(0);
+
+    const boardBView = await boardRepo.getBoardWithContents(ctxB, boardB.id);
+    const cardIdsOnB = boardBView!.lists.flatMap((l) => l.cards.map((c) => c.id));
+    expect(cardIdsOnB).not.toContain(cardA.id);
   });
 });
