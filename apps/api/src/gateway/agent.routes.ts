@@ -65,16 +65,34 @@ router.get(
   async (req, res, next) => {
     try {
       const agents = await agentRepo.listAgents(req.ctx!);
+      const actorIds = agents.map((a) => a.actorId);
+      // "Is it actually doing anything?" — last audited action and open cards
+      // per agent, in two grouped queries rather than one per agent.
+      const [lastSeen, cardCounts] = await Promise.all([
+        prisma.auditEntry.groupBy({
+          by: ["actorId"],
+          where: { workspaceId: req.ctx!.workspaceId, actorId: { in: actorIds } },
+          _max: { createdAt: true },
+        }),
+        prisma.card.groupBy({
+          by: ["assigneeId"],
+          where: { workspaceId: req.ctx!.workspaceId, assigneeId: { in: actorIds } },
+          _count: { _all: true },
+        }),
+      ]);
       res.json(
         agents.map((a) => ({
           id: a.id,
           actorId: a.actorId, // this is what Card.assigneeId expects
           displayName: a.actor.displayName,
           modelProvider: a.modelProvider,
+          client: (a.capabilities as { client?: string } | null)?.client ?? null,
           allowedScopes: a.allowedScopes,
           status: a.status,
           clientId: a.clientId,
           createdAt: a.createdAt,
+          lastActiveAt: lastSeen.find((l) => l.actorId === a.actorId)?._max.createdAt ?? null,
+          assignedCards: cardCounts.find((c) => c.assigneeId === a.actorId)?._count._all ?? 0,
         })),
       );
     } catch (err) {

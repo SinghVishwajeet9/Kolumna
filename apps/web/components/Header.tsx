@@ -21,6 +21,14 @@ export function Header() {
           <div className="ml-auto flex items-center gap-5">
             {user ? (
               <>
+                <nav className="flex items-center gap-5 text-[14px]" style={{ fontFamily: "var(--font-mono)" }}>
+                  <Link href="/boards" className="text-muted transition-colors hover:text-fg">
+                    boards
+                  </Link>
+                  <Link href="/agents" className="text-muted transition-colors hover:text-fg">
+                    agents
+                  </Link>
+                </nav>
                 <span
                   className="hidden text-[14px] text-muted sm:block"
                   style={{ fontFamily: "var(--font-mono)" }}
