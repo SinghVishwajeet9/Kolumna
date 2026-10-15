@@ -164,7 +164,7 @@ export default function AgentsPage() {
   const path = (a: Agent, verb: string) => `/workspaces/${workspace!.id}/agents/${a.id}/${verb}`;
 
   return (
-    <main className="min-h-[calc(100vh-64px)] bg-bg">
+    <main className="min-h-screen bg-bg">
       <div className="mx-auto max-w-5xl px-6 py-14 lg:py-20">
         <div className="mb-10 flex items-end justify-between gap-4">
           <div>

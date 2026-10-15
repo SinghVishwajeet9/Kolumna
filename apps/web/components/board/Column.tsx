@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { Plus } from "@phosphor-icons/react";
 import type { BoardList } from "./types";
 import { CardTile } from "./CardTile";
 
@@ -30,23 +31,20 @@ export function Column({
 
   return (
     <section
-      className="flex w-[300px] shrink-0 flex-col border bg-surface"
+      className="flex w-[280px] shrink-0 flex-col bg-[#1a1a1c] p-1.5 outline outline-1 transition-[outline-color]"
       style={{
-        borderRadius: "14px",
-        borderColor: isOver ? "rgba(90,247,179,0.45)" : "var(--color-line)",
-        maxHeight: "calc(100vh - 210px)",
+        borderRadius: "12px",
+        // A thin white outline while a card is dragged over — no colour wash.
+        outlineColor: isOver ? "rgba(255,255,255,0.35)" : "transparent",
+        maxHeight: "calc(100vh - 150px)",
       }}
     >
-      <header className="flex items-center justify-between px-4 pt-4 pb-3">
-        <h2 className="text-[13px] uppercase tracking-[0.12em] text-muted" style={{ fontFamily: "var(--font-mono)" }}>
-          {list.title}
-        </h2>
-        <span className="text-[12px] text-faint" style={{ fontFamily: "var(--font-mono)" }}>
-          {list.cards.length}
-        </span>
+      <header className="flex items-center gap-2 px-2.5 pt-2 pb-2.5">
+        <h2 className="text-[13px] font-medium text-muted">{list.title}</h2>
+        <span className="text-[13px] text-faint">{list.cards.length}</span>
       </header>
 
-      <div ref={setNodeRef} className="flex min-h-[40px] flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-3">
+      <div ref={setNodeRef} className="flex min-h-[8px] flex-1 flex-col gap-1.5 overflow-y-auto">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
             <CardTile key={card.id} card={card} onOpen={() => onOpenCard(card.id)} />
@@ -54,7 +52,7 @@ export function Column({
         </SortableContext>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className={list.cards.length ? "pt-1.5" : ""}>
         {adding ? (
           <form onSubmit={submit}>
             <input
@@ -63,8 +61,8 @@ export function Column({
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => !title && setAdding(false)}
               onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
-              placeholder="Card title — Enter to add"
-              className="w-full border border-line bg-surface-2 px-3 py-2.5 text-[14px] text-fg placeholder:text-faint focus:border-accent focus:outline-none"
+              placeholder="What needs to be done? — Enter"
+              className="w-full bg-[#262628] px-3 py-2.5 text-[14px] text-fg outline outline-1 outline-white/30 placeholder:text-faint focus:outline-white/50"
               style={{ borderRadius: "8px" }}
             />
           </form>
@@ -72,10 +70,11 @@ export function Column({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="w-full px-3 py-2 text-left text-[13px] text-faint transition-colors hover:text-fg"
-            style={{ fontFamily: "var(--font-mono)" }}
+            title="Add card"
+            className="flex h-7 w-full items-center justify-center border border-dashed border-line-bright/70 text-faint transition-colors hover:border-white/40 hover:bg-white/[0.03] hover:text-fg"
+            style={{ borderRadius: "8px" }}
           >
-            + add card
+            <Plus size={14} />
           </button>
         )}
       </div>

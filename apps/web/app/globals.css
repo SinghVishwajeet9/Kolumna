@@ -216,3 +216,24 @@ html.lenis body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Thin, dark scrollbars for everything inside the app (board columns,
+   panels, the sidebar) instead of the browser's default bright bar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3d transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3a3a3d;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4e;
+}

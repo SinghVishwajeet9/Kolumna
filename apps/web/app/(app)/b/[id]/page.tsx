@@ -15,6 +15,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
+import { Plus } from "@phosphor-icons/react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Column } from "@/components/board/Column";
@@ -174,7 +175,7 @@ export default function BoardPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-64px)] bg-bg">
+    <main className="min-h-screen bg-bg">
       <div className="px-6 pt-10 pb-6 lg:px-10">
         <Link href="/boards" className="text-[13px] text-faint hover:text-fg" style={mono}>
           ← boards
@@ -204,12 +205,12 @@ export default function BoardPage() {
             void load();
           }}
         >
-          <div className="flex items-start gap-4 overflow-x-auto px-6 pb-10 lg:px-10">
+          <div className="flex items-start gap-3 overflow-x-auto px-6 pb-10 lg:px-10">
             {board.lists.map((list) => (
               <Column key={list.id} list={list} onOpenCard={setOpenCardId} onAddCard={addCard} />
             ))}
 
-            <div className="w-[300px] shrink-0">
+            <div className="w-[280px] shrink-0">
               {addingColumn ? (
                 <form onSubmit={addColumn}>
                   <input
@@ -218,18 +219,18 @@ export default function BoardPage() {
                     onChange={(e) => setColumnTitle(e.target.value)}
                     onBlur={() => !columnTitle && setAddingColumn(false)}
                     placeholder="Column name — Enter to add"
-                    className="w-full border border-line bg-surface px-4 py-3 text-[14px] text-fg placeholder:text-faint focus:border-accent focus:outline-none"
-                    style={{ borderRadius: 14 }}
+                    className="w-full bg-[#1a1a1c] px-3 py-2.5 text-[14px] text-fg outline outline-1 outline-white/30 placeholder:text-faint focus:outline-white/50"
+                    style={{ borderRadius: 12 }}
                   />
                 </form>
               ) : (
                 <button
                   type="button"
                   onClick={() => setAddingColumn(true)}
-                  className="w-full border border-dashed border-line px-4 py-4 text-left text-[13px] text-faint transition-colors hover:border-line-bright hover:text-fg"
-                  style={{ borderRadius: 14, ...mono }}
+                  className="flex h-10 w-full items-center gap-2 border border-dashed border-line-bright/70 px-3 text-[13px] text-faint transition-colors hover:border-white/40 hover:text-fg"
+                  style={{ borderRadius: 12 }}
                 >
-                  + add column
+                  <Plus size={14} /> Add column
                 </button>
               )}
             </div>
