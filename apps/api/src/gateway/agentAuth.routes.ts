@@ -12,7 +12,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { findAgentByClientId } from "./agent.repo.js";
-import { createGrant } from "./agentGrant.repo.js";
+import { AccessEndedError, createGrant } from "./agentGrant.repo.js";
 import { hashSecret } from "./credentials.js";
 import { ValidationError } from "../lib/errors.js";
 import { requireAgentAuth } from "../middleware/requireAgentAuth.js";
@@ -21,7 +21,7 @@ import { isSubset, parseScopes, scopeListSchema } from "./scopes.js";
 const router = Router();
 
 const DEFAULT_TTL_SECONDS = 60 * 60; // 1 hour
-const MAX_TTL_SECONDS = 60 * 60 * 24; // 24 hours — no sprint/project to tie expiry to yet
+const MAX_TTL_SECONDS = 60 * 60 * 24; // 24 hours; also capped at the agent's access end (G14)
 
 const tokenRequestSchema = z.object({
   clientId: z.string().min(1),
@@ -51,13 +51,20 @@ router.post("/agent-auth/token", async (req, res, next) => {
       return res.status(403).json({ error: "Requested scopes exceed this agent's allowed scopes" });
     }
 
-    const { grant, token } = await createGrant({
-      agentId: agent.id,
-      workspaceId: agent.workspaceId,
-      scopes,
-      ttlSeconds: ttlSeconds ?? DEFAULT_TTL_SECONDS,
-      issuedByActorId: agent.ownerActorId,
-    });
+    let issued;
+    try {
+      issued = await createGrant({
+        agentId: agent.id,
+        workspaceId: agent.workspaceId,
+        scopes,
+        ttlSeconds: ttlSeconds ?? DEFAULT_TTL_SECONDS,
+        issuedByActorId: agent.ownerActorId,
+      });
+    } catch (err) {
+      if (err instanceof AccessEndedError) return res.status(403).json({ error: err.message });
+      throw err;
+    }
+    const { grant, token } = issued;
 
     res.status(201).json({
       accessToken: token,

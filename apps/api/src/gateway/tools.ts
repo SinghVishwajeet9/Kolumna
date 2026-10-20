@@ -106,13 +106,50 @@ const UNTRUSTED_NOTICE =
 
 // --- Shared lookups ---------------------------------------------------------
 
-async function findCard(tx: Tx, workspaceId: string, cardId: string) {
+// Agents (and the humans instructing them) say "work on PRM-3", so every tool
+// that takes a card accepts its key as well as its id. Ids are cuids, which
+// never contain "-", so the two can't be confused.
+const cardRef = z.string().min(1).max(100).describe('The card key (e.g. "PRM-3") or its id');
+const CARD_KEY = /^([A-Za-z0-9]+)-(\d+)$/;
+
+async function findCard(tx: Tx, workspaceId: string, ref: string) {
+  const key = CARD_KEY.exec(ref.trim());
   const card = await tx.card.findFirst({
-    where: { id: cardId, workspaceId },
-    include: { list: { include: { board: true } } },
+    where: key
+      ? { workspaceId, number: Number(key[2]), board: { key: key[1]!.toUpperCase() } }
+      : { id: ref, workspaceId },
+    include: { list: { include: { board: true } }, epic: true, sprint: true },
   });
-  if (!card) throw new ToolError("NOT_FOUND", "Card not found");
+  if (!card) throw new ToolError("NOT_FOUND", `Card ${ref} not found`);
   return card;
+}
+
+// The planning fields every card summary carries.
+function planning(
+  card: {
+    number: number;
+    priority: string;
+    storyPoints: number | null;
+    epic: { title: string } | null;
+    sprint: { name: string; status: string } | null;
+  },
+  boardKey: string,
+) {
+  return {
+    key: `${boardKey}-${card.number}`,
+    priority: card.priority,
+    storyPoints: card.storyPoints,
+    epic: card.epic?.title ?? null,
+    sprint: card.sprint ? { name: card.sprint.name, status: card.sprint.status } : null,
+  };
+}
+
+const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 };
+
+// "Done" = the board's last column, the same rule sprint completion uses.
+async function doneColumnId(tx: Tx, workspaceId: string, boardId: string) {
+  const last = await tx.list.findFirst({ where: { boardId, workspaceId }, orderBy: { rank: "desc" } });
+  return last?.id ?? null;
 }
 
 // card:write is "change cards assigned to YOU". Cards assigned to someone
@@ -174,21 +211,26 @@ const selfTarget = (ctx: ToolContext) => ({ targetType: "Agent", targetId: ctx.a
 export const listMyTasksTool = defineTool({
   name: "list_my_tasks",
   description:
-    "List the cards assigned to you in this workspace, with their board, current column and checklist progress. Start here when asked to check your tasks.",
+    "List the cards assigned to you in this workspace (key, board, column, priority, sprint, checklist progress), with the active sprint's work first and then by priority. Start here when asked to check your tasks.",
   input: z.object({}),
   requiredScope: "card:read",
   auditAction: "AGENT.LIST_MY_TASKS",
   handler: async (_input, ctx) => {
     const cards = await ctx.tx.card.findMany({
       where: { workspaceId: ctx.workspaceId, assigneeId: ctx.actorId },
-      include: { list: { include: { board: true } }, checklistItems: true },
+      include: { list: { include: { board: true } }, checklistItems: true, epic: true, sprint: true },
       orderBy: { createdAt: "asc" },
     });
+    // What to pick up next: the running sprint first, then by priority.
+    const rank = (c: (typeof cards)[number]) =>
+      (c.sprint?.status === "ACTIVE" ? 0 : 10) + (PRIORITY_ORDER[c.priority] ?? 4);
+    cards.sort((a, b) => rank(a) - rank(b));
     return {
       output: {
         notice: UNTRUSTED_NOTICE,
         tasks: cards.map((c) => ({
           cardId: c.id,
+          ...planning(c, c.list.board.key),
           title: c.title,
           board: { id: c.list.board.id, title: c.list.board.title },
           column: c.list.title,
@@ -212,7 +254,7 @@ export const listBoardsTool = defineTool({
       orderBy: { createdAt: "asc" },
     });
     return {
-      output: { boards: boards.map((b) => ({ id: b.id, title: b.title })) },
+      output: { boards: boards.map((b) => ({ id: b.id, key: b.key, title: b.title })) },
       audit: selfTarget(ctx),
     };
   },
@@ -221,12 +263,13 @@ export const listBoardsTool = defineTool({
 export const getBoardTool = defineTool({
   name: "get_board",
   description:
-    "Get a board's columns (in order) and the cards in each, with assignee and checklist progress.",
+    "Get a board's columns (in order) and the cards in each (key, assignee, priority, sprint, checklist progress), plus the board's active sprint if one is running.",
   input: z.object({ boardId: z.string().min(1) }),
   requiredScope: "board:read",
   auditAction: "AGENT.GET_BOARD",
   handler: async (input, ctx) => {
-    await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
+    const board = await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
+    const activeSprint = await ctx.tx.sprint.findFirst({ where: { boardId: board.id, status: "ACTIVE" } });
     const lists = await ctx.tx.list.findMany({
       where: { boardId: input.boardId, workspaceId: ctx.workspaceId },
       orderBy: { rank: "asc" },
@@ -234,17 +277,22 @@ export const getBoardTool = defineTool({
         cards: {
           where: { workspaceId: ctx.workspaceId },
           orderBy: { rank: "asc" },
-          include: { assignee: true, checklistItems: true },
+          include: { assignee: true, checklistItems: true, epic: true, sprint: true },
         },
       },
     });
     return {
       output: {
         notice: UNTRUSTED_NOTICE,
+        board: { id: board.id, key: board.key, title: board.title },
+        activeSprint: activeSprint
+          ? { name: activeSprint.name, goal: activeSprint.goal, endsAt: activeSprint.endsAt }
+          : null,
         columns: lists.map((l) => ({
           column: l.title,
           cards: l.cards.map((c) => ({
             cardId: c.id,
+            ...planning(c, board.key),
             title: c.title,
             assignee: c.assignee
               ? { actorId: c.assignee.id, name: c.assignee.displayName, type: c.assignee.type }
@@ -289,8 +337,8 @@ export const listMembersTool = defineTool({
 export const getTicketTool = defineTool({
   name: "get_ticket",
   description:
-    "Get one card in full: title, description, board and column, assignee, checklist with progress, and the latest comments.",
-  input: z.object({ cardId: z.string().min(1).describe("The card's id") }),
+    "Get one card in full: key, title, description, board and column, priority, story points, epic, sprint, assignee, checklist with progress, and the latest comments.",
+  input: z.object({ cardId: cardRef }),
   requiredScope: "card:read",
   auditAction: "AGENT.GET_TICKET",
   handler: async (input, ctx) => {
@@ -309,6 +357,7 @@ export const getTicketTool = defineTool({
       output: {
         notice: UNTRUSTED_NOTICE,
         id: card.id,
+        ...planning(card, card.list.board.key),
         title: card.title,
         description: card.description,
         board: { id: card.list.board.id, title: card.list.board.title },
@@ -340,7 +389,7 @@ export const moveTicketTool = defineTool({
   description:
     "Move a card assigned to you to another column on the same board, by column name (e.g. \"In Progress\", \"Done\"). Do this when you start and when you finish.",
   input: z.object({
-    cardId: z.string().min(1),
+    cardId: cardRef,
     column: z.string().min(1).max(100).describe("Target column name, as shown by get_board"),
   }),
   requiredScope: "card:write",
@@ -369,7 +418,7 @@ export const addCommentTool = defineTool({
   description:
     "Post a progress note on a card assigned to you — what you did, found, or are blocked on. Keep it short and concrete.",
   input: z.object({
-    cardId: z.string().min(1),
+    cardId: cardRef,
     body: z.string().min(1).max(4000),
   }),
   requiredScope: "card:write",
@@ -391,7 +440,7 @@ export const addChecklistItemsTool = defineTool({
   description:
     "Add steps to the checklist of a card assigned to you. The card's % complete is computed from these, so break the work into real, checkable steps before starting.",
   input: z.object({
-    cardId: z.string().min(1),
+    cardId: cardRef,
     items: z.array(z.string().min(1).max(200)).min(1).max(20).describe("Step titles, in order"),
   }),
   requiredScope: "card:write",
@@ -468,7 +517,7 @@ export const proposeSubtasksTool = defineTool({
   description:
     "Propose a breakdown of a card assigned to you into ordered subtasks, for a human to approve. On approval they become the card's checklist. Use this when the plan itself should be reviewed before you start.",
   input: z.object({
-    cardId: z.string().min(1).describe("The parent ticket's id"),
+    cardId: cardRef,
     subtasks: z
       .array(z.string().min(1).max(200))
       .min(1)
@@ -483,7 +532,7 @@ export const proposeSubtasksTool = defineTool({
   requiredScope: "card:write",
   auditAction: "AGENT.PROPOSE_SUBTASKS",
   handler: async (input, ctx) => {
-    await findOwnCard(ctx.tx, ctx, input.cardId);
+    const card = await findOwnCard(ctx.tx, ctx, input.cardId);
 
     // Queue retries run a job again. A run that already proposed gets its
     // existing proposal back — no duplicate, and no second audit entry.
@@ -497,7 +546,7 @@ export const proposeSubtasksTool = defineTool({
     const proposal = await ctx.tx.subtaskProposal.create({
       data: {
         workspaceId: ctx.workspaceId,
-        cardId: input.cardId,
+        cardId: card.id,
         proposedByActorId: ctx.actorId,
         runId: ctx.runId,
         subtasks: input.subtasks.map((title) => ({ title })),
@@ -509,7 +558,7 @@ export const proposeSubtasksTool = defineTool({
       output: { proposalId: proposal.id, status: proposal.status },
       audit: {
         targetType: "Card",
-        targetId: input.cardId,
+        targetId: card.id,
         result: "PENDING_APPROVAL",
         resource: proposal.id,
         reasoningSummary: input.reasoningSummary,
@@ -518,22 +567,131 @@ export const proposeSubtasksTool = defineTool({
   },
 });
 
+// Estimates and urgency on your own card. Which sprint or epic a card belongs
+// to is a planning decision and stays with the humans (the backlog page).
+export const updateTicketTool = defineTool({
+  name: "update_ticket",
+  description:
+    "Set the priority and/or story-point estimate of a card assigned to you, e.g. after investigating shows it is bigger or more urgent than it looked. Say why in an add_comment.",
+  input: z
+    .object({
+      cardId: cardRef,
+      priority: z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+      storyPoints: z.number().int().min(0).max(100).nullable().optional().describe("null clears the estimate"),
+    })
+    .refine((v) => v.priority !== undefined || v.storyPoints !== undefined, {
+      message: "Give priority and/or storyPoints",
+    }),
+  requiredScope: "card:write",
+  auditAction: "AGENT.UPDATE_TICKET",
+  handler: async (input, ctx) => {
+    const card = await findOwnCard(ctx.tx, ctx, input.cardId);
+    const data = {
+      ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      ...(input.storyPoints !== undefined ? { storyPoints: input.storyPoints } : {}),
+    };
+    await ctx.tx.card.update({ where: { id: card.id }, data });
+    const changes = [
+      input.priority !== undefined && `priority ${card.priority} -> ${input.priority}`,
+      input.storyPoints !== undefined && `points ${card.storyPoints ?? "none"} -> ${input.storyPoints ?? "none"}`,
+    ].filter(Boolean);
+    return {
+      output: { cardId: card.id, key: `${card.list.board.key}-${card.number}`, ...data },
+      audit: { targetType: "Card", targetId: card.id, resource: changes.join(", ") },
+    };
+  },
+});
+
+export const getSprintTool = defineTool({
+  name: "get_sprint",
+  description:
+    "Get a board's active sprint: goal, dates, days left, every card in it (key, column, assignee, done or not) and how many cards and points are done. If no sprint is running, lists the planned ones.",
+  input: z.object({ boardId: z.string().min(1) }),
+  requiredScope: "board:read",
+  auditAction: "AGENT.GET_SPRINT",
+  handler: async (input, ctx) => {
+    const board = await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
+    const sprint = await ctx.tx.sprint.findFirst({
+      where: { boardId: board.id, status: "ACTIVE" },
+      include: { cards: { include: { list: true, assignee: true, epic: true } } },
+    });
+    if (!sprint) {
+      const planned = await ctx.tx.sprint.findMany({
+        where: { boardId: board.id, status: "PLANNED" },
+        orderBy: { createdAt: "asc" },
+        include: { _count: { select: { cards: true } } },
+      });
+      return {
+        output: {
+          activeSprint: null,
+          planned: planned.map((s) => ({ name: s.name, goal: s.goal, cards: s._count.cards })),
+        },
+        audit: { targetType: "Board", targetId: board.id },
+      };
+    }
+    const done = await doneColumnId(ctx.tx, ctx.workspaceId, board.id);
+    const cards = [...sprint.cards].sort(
+      (a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4),
+    );
+    const isDone = (c: (typeof cards)[number]) => c.listId === done;
+    const pts = (cs: typeof cards) => cs.reduce((n, c) => n + (c.storyPoints ?? 0), 0);
+    return {
+      output: {
+        notice: UNTRUSTED_NOTICE,
+        activeSprint: {
+          name: sprint.name,
+          goal: sprint.goal,
+          startsAt: sprint.startsAt,
+          endsAt: sprint.endsAt,
+          daysLeft: sprint.endsAt ? Math.ceil((sprint.endsAt.getTime() - Date.now()) / 86_400_000) : null,
+          cards: { done: cards.filter(isDone).length, total: cards.length },
+          points: { done: pts(cards.filter(isDone)), total: pts(cards) },
+        },
+        cards: cards.map((c) => ({
+          cardId: c.id,
+          key: `${board.key}-${c.number}`,
+          title: c.title,
+          column: c.list.title,
+          done: isDone(c),
+          priority: c.priority,
+          storyPoints: c.storyPoints,
+          epic: c.epic?.title ?? null,
+          assignee: c.assignee
+            ? { name: c.assignee.displayName, type: c.assignee.type, isYou: c.assigneeId === ctx.actorId }
+            : null,
+        })),
+      },
+      audit: { targetType: "Sprint", targetId: sprint.id },
+    };
+  },
+});
+
 // --- Workspace-wide writes (their own scopes) --------------------------------
 
 export const createTaskTool = defineTool({
   name: "create_task",
-  description: "Create a new card in a column of a board.",
+  description:
+    "Create a new card in a column of a board. It goes to the board's backlog unless you set addToActiveSprint: adding work to a running sprint changes its scope, so only do that when asked to.",
   input: z.object({
     boardId: z.string().min(1),
     column: z.string().min(1).max(100).describe("Column name, as shown by get_board"),
     title: z.string().min(1).max(200),
     description: z.string().max(10_000).optional(),
+    priority: z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+    storyPoints: z.number().int().min(0).max(100).optional(),
+    addToActiveSprint: z.boolean().optional().describe("Put the card in the board's running sprint"),
   }),
   requiredScope: "card:create",
   auditAction: "AGENT.CREATE_TASK",
   handler: async (input, ctx) => {
-    await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
+    const board = await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
     const list = await findColumn(ctx.tx, ctx.workspaceId, input.boardId, input.column);
+    const sprint = input.addToActiveSprint
+      ? await ctx.tx.sprint.findFirst({ where: { boardId: board.id, status: "ACTIVE" } })
+      : null;
+    if (input.addToActiveSprint && !sprint) {
+      throw new ToolError("NOT_FOUND", "This board has no active sprint; leave addToActiveSprint off");
+    }
     const card = await ctx.tx.card.create({
       data: {
         workspaceId: ctx.workspaceId,
@@ -542,12 +700,20 @@ export const createTaskTool = defineTool({
         number: await allocateCardNumber(ctx.tx, input.boardId),
         title: input.title,
         description: input.description ?? null,
+        priority: input.priority ?? "NONE",
+        storyPoints: input.storyPoints ?? null,
+        sprintId: sprint?.id ?? null,
         rank: await nextCardRank(ctx.tx, ctx.workspaceId, list.id),
       },
     });
     return {
-      output: { cardId: card.id, column: list.title },
-      audit: { targetType: "Card", targetId: card.id },
+      output: {
+        cardId: card.id,
+        key: `${board.key}-${card.number}`,
+        column: list.title,
+        sprint: sprint?.name ?? "backlog",
+      },
+      audit: { targetType: "Card", targetId: card.id, resource: sprint ? `into ${sprint.name}` : "into backlog" },
     };
   },
 });
@@ -557,7 +723,7 @@ export const assignTaskTool = defineTool({
   description:
     "Assign a card to a workspace member — a human or another agent (find them with list_members). Pass assigneeActorId null to unassign.",
   input: z.object({
-    cardId: z.string().min(1),
+    cardId: cardRef,
     assigneeActorId: z.string().min(1).nullable(),
   }),
   requiredScope: "card:assign",
@@ -589,7 +755,9 @@ export const tools: Tool[] = [
   getBoardTool,
   listMembersTool,
   getTicketTool,
+  getSprintTool,
   moveTicketTool,
+  updateTicketTool,
   addCommentTool,
   addChecklistItemsTool,
   completeChecklistItemTool,

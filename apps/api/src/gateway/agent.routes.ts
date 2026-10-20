@@ -9,7 +9,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import * as agentRepo from "./agent.repo.js";
-import { revokeAllGrantsForAgent } from "./agentGrant.repo.js";
+import { accessEnd, revokeAllGrantsForAgent } from "./agentGrant.repo.js";
 import { appendAuditEntry, writeAuditEntry, AUDIT_TX_OPTIONS } from "../lib/audit.js";
 import { prisma } from "../lib/prisma.js";
 import { NotFoundError, ValidationError } from "../lib/errors.js";
@@ -93,6 +93,12 @@ router.get(
           createdAt: a.createdAt,
           lastActiveAt: lastSeen.find((l) => l.actorId === a.actorId)?._max.createdAt ?? null,
           assignedCards: cardCounts.find((c) => c.assigneeId === a.actorId)?._count._all ?? 0,
+          accessUntil: a.accessUntil,
+          accessSprint: a.accessSprint ? { id: a.accessSprint.id, name: a.accessSprint.name, status: a.accessSprint.status } : null,
+          accessEnded: (() => {
+            const end = accessEnd(a);
+            return end !== null && end.at.getTime() <= Date.now();
+          })(),
         })),
       );
     } catch (err) {
@@ -184,6 +190,78 @@ router.patch(
         resource: `${rejected} pending proposals rejected`,
       });
       res.json({ id: agent.id, status: "REVOKED" });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// G14 — when this agent's engagement ends: a date, the end of a sprint, both
+// (whichever comes first), or neither (null clears). Shortening it caps the
+// agent's live grants straight away rather than at their natural expiry.
+const accessSchema = z.object({
+  accessUntil: z.string().datetime().nullable().optional(),
+  accessSprintId: z.string().nullable().optional(),
+});
+
+router.patch(
+  "/workspaces/:workspaceId/agents/:agentId/access",
+  requireAuth,
+  requireWorkspaceMember,
+  async (req, res, next) => {
+    try {
+      const parsed = accessSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.message);
+      const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
+      if (!agent) throw new NotFoundError("Agent not found");
+
+      const { accessUntil, accessSprintId } = parsed.data;
+      if (accessSprintId) {
+        const sprint = await prisma.sprint.findFirst({
+          where: { id: accessSprintId, workspaceId: req.ctx!.workspaceId },
+        });
+        if (!sprint) throw new ValidationError("Sprint not found in this workspace");
+        if (sprint.status === "COMPLETED") throw new ValidationError("That sprint is already completed");
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const a = await tx.agent.update({
+          where: { id: agent.id },
+          data: {
+            ...(accessUntil !== undefined ? { accessUntil: accessUntil ? new Date(accessUntil) : null } : {}),
+            ...(accessSprintId !== undefined ? { accessSprintId } : {}),
+          },
+          include: { accessSprint: { select: { id: true, name: true, status: true, completedAt: true } } },
+        });
+        const end = accessEnd(a);
+        if (end) {
+          await tx.agentGrant.updateMany({
+            where: { agentId: a.id, revokedAt: null, expiresAt: { gt: end.at } },
+            data: { expiresAt: end.at },
+          });
+        }
+        await appendAuditEntry(tx, {
+          workspaceId: req.ctx!.workspaceId,
+          actorId: req.ctx!.actorId,
+          action: "AGENT.SET_ACCESS",
+          targetType: "Agent",
+          targetId: a.id,
+          result: "SUCCESS",
+          resource: [
+            a.accessUntil ? `until ${a.accessUntil.toISOString()}` : null,
+            a.accessSprint ? `until ${a.accessSprint.name} completes` : null,
+          ].filter(Boolean).join("; ") || "no end",
+        });
+        return a;
+      }, AUDIT_TX_OPTIONS);
+
+      res.json({
+        id: updated.id,
+        accessUntil: updated.accessUntil,
+        accessSprint: updated.accessSprint
+          ? { id: updated.accessSprint.id, name: updated.accessSprint.name, status: updated.accessSprint.status }
+          : null,
+      });
     } catch (err) {
       next(err);
     }

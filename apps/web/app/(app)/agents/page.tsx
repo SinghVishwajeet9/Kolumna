@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { CornerMarks } from "@/components/ui/CornerMarks";
 import { GooeyButton } from "@/components/marketing/GooeyButton";
 import { CLIENTS, ConnectSnippets, type ClientId } from "@/components/agents/ConnectSnippets";
+import { Select } from "@/components/ui/Select";
 
 const mono = { fontFamily: "var(--font-mono)" };
 
@@ -25,7 +26,12 @@ type Agent = {
   createdAt: string;
   lastActiveAt: string | null;
   assignedCards: number;
+  accessUntil: string | null;
+  accessSprint: { id: string; name: string; status: string } | null;
+  accessEnded: boolean;
 };
+
+type OpenSprint = { id: string; name: string; status: string; board: { title: string } };
 
 // What each scope lets an agent do, in plain words — the ceiling is a
 // governance decision, so the person making it should see the consequence.
@@ -53,17 +59,27 @@ function timeAgo(iso: string | null) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-async function fetchAgents(): Promise<{ workspace: Workspace | null; agents: Agent[] }> {
+async function fetchAgents(): Promise<{ workspace: Workspace | null; agents: Agent[]; sprints: OpenSprint[] }> {
   const workspace = (await api.get<Workspace[]>("/workspaces"))[0] ?? null;
-  if (!workspace) return { workspace: null, agents: [] };
-  return { workspace, agents: await api.get<Agent[]>(`/workspaces/${workspace.id}/agents`) };
+  if (!workspace) return { workspace: null, agents: [], sprints: [] };
+  const [agents, sprints] = await Promise.all([
+    api.get<Agent[]>(`/workspaces/${workspace.id}/agents`),
+    api.get<OpenSprint[]>(`/workspaces/${workspace.id}/sprints`),
+  ]);
+  return { workspace, agents, sprints };
 }
+
+// "2026-11-03T00:00:00Z" → "2026-11-03" for a date input, and back as the END
+// of that local day, so "until the 3rd" includes the 3rd.
+const toDateInput = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA") : "");
+const endOfDay = (d: string) => new Date(`${d}T23:59:59`).toISOString();
 
 export default function AgentsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [sprints, setSprints] = useState<OpenSprint[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,9 +99,10 @@ export default function AgentsPage() {
 
   function refresh() {
     return fetchAgents().then(
-      ({ workspace, agents }) => {
+      ({ workspace, agents, sprints }) => {
         setWorkspace(workspace);
         setAgents(agents);
+        setSprints(sprints);
         setLoaded(true);
       },
       () => {
@@ -254,6 +271,14 @@ export default function AgentsPage() {
                   )}
                 </div>
 
+                {a.status !== "REVOKED" && (
+                  <AccessRow
+                    agent={a}
+                    sprints={sprints}
+                    onChange={(body) => act(() => api.patch(path(a, "access"), body))}
+                  />
+                )}
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   {a.allowedScopes.map((s) => (
                     <span key={s} className="border border-line px-2.5 py-1 text-[11px] text-muted" style={{ borderRadius: 999, ...mono }}>
@@ -362,5 +387,59 @@ export default function AgentsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// G14: when this agent's engagement ends. Either a sprint ("until PRM Sprint 2
+// is completed"), a date, or both (whichever comes first). After that it
+// can't connect, and its live sessions are cut off.
+function AccessRow({
+  agent,
+  sprints,
+  onChange,
+}: {
+  agent: Agent;
+  sprints: OpenSprint[];
+  onChange: (body: { accessSprintId?: string | null; accessUntil?: string | null }) => Promise<void>;
+}) {
+  const options = [
+    { value: null, label: "No sprint" },
+    // Its current sprint stays listed even once completed, so the field shows the truth.
+    ...(agent.accessSprint && !sprints.some((s) => s.id === agent.accessSprint!.id)
+      ? [{ value: agent.accessSprint.id, label: agent.accessSprint.name, note: agent.accessSprint.status.toLowerCase(), disabled: true }]
+      : []),
+    ...sprints.map((s) => ({
+      value: s.id,
+      label: s.name,
+      note: `${s.board.title}${s.status === "ACTIVE" ? " · active" : ""}`,
+    })),
+  ];
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-4 text-[13px]">
+      <span className="text-faint">Access ends</span>
+      <div className="w-[240px]">
+        <Select
+          compact
+          value={agent.accessSprint?.id ?? null}
+          onChange={(accessSprintId) => void onChange({ accessSprintId })}
+          options={options}
+        />
+      </div>
+      <span className="text-faint">or on</span>
+      <input
+        type="date"
+        value={toDateInput(agent.accessUntil)}
+        onChange={(e) => void onChange({ accessUntil: e.target.value ? endOfDay(e.target.value) : null })}
+        className="bg-surface-2 px-2.5 py-1.5 text-[13px] text-fg shadow-[inset_0_0_0_1px_var(--color-line)] outline-none [color-scheme:dark] focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
+        style={{ borderRadius: 8, ...mono }}
+      />
+      {agent.accessEnded ? (
+        <span className="text-[#fca5a5]">· access has ended; it can no longer connect</span>
+      ) : agent.accessSprint || agent.accessUntil ? (
+        <span className="text-faint">· whichever comes first</span>
+      ) : (
+        <span className="text-faint">· never (until you suspend or revoke it)</span>
+      )}
+    </div>
   );
 }

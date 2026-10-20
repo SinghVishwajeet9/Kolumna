@@ -66,7 +66,7 @@ export async function createAgent(
 export async function listAgents(ctx: TenantContext) {
   return prisma.agent.findMany({
     where: { workspaceId: ctx.workspaceId },
-    include: { actor: true },
+    include: { actor: true, accessSprint: { select: { id: true, name: true, status: true, completedAt: true } } },
     orderBy: { createdAt: "asc" },
   });
 }

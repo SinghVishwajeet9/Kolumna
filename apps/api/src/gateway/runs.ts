@@ -4,7 +4,7 @@
 // both paths end in the same callTool checks (kolumna-architecture.md §6).
 
 import { prisma } from "../lib/prisma.js";
-import { createGrant } from "./agentGrant.repo.js";
+import { AccessEndedError, createGrant } from "./agentGrant.repo.js";
 import { parseScopes } from "./scopes.js";
 import type { CallContext } from "./tools.js";
 
@@ -35,14 +35,19 @@ export async function startRun(params: {
   const scopes = parseScopes(agent.allowedScopes);
   if (scopes.length === 0) throw new RunRefusedError("Agent has no allowed scopes");
 
-  const { grant } = await createGrant({
+  const grant = await createGrant({
     agentId: agent.id,
     workspaceId: agent.workspaceId,
     scopes,
     ttlSeconds: RUN_GRANT_TTL_SECONDS,
     issuedByActorId: params.requestedByActorId,
     kind: "HOSTED_RUN",
-  });
+  }).then(
+    (r) => r.grant,
+    (err) => {
+      throw err instanceof AccessEndedError ? new RunRefusedError(err.message) : err;
+    },
+  );
 
   return {
     grantId: grant.id,

@@ -124,11 +124,18 @@ model Agent {
   clientId           String      @unique
   hashedClientSecret String
   createdAt          DateTime    @default(now())
+  // G14 — an engagement end, so an agent brought in for a sprint doesn't keep
+  // its credential forever. Access ends at accessUntil, or when accessSprint
+  // is completed, whichever comes first. Enforced at grant issuance
+  // (agentGrant.repo.ts); completing the sprint revokes its live grants.
+  accessUntil        DateTime?
+  accessSprintId     String?
 
-  actor     Actor        @relation(fields: [actorId], references: [id], onDelete: Cascade)
-  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner     Actor        @relation("AgentOwner", fields: [ownerActorId], references: [id])
-  grants    AgentGrant[]
+  actor        Actor        @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  accessSprint Sprint?      @relation(fields: [accessSprintId], references: [id], onDelete: SetNull)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner        Actor        @relation("AgentOwner", fields: [ownerActorId], references: [id])
+  grants       AgentGrant[]
 
   @@index([workspaceId])
 }
@@ -416,6 +423,7 @@ model Sprint {
   completedAt DateTime?
   createdAt   DateTime     @default(now())
   cards       Card[]
+  boundAgents Agent[] // agents whose access ends when this sprint is completed (G14)
   board       Board        @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

@@ -9,6 +9,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import { appendAuditEntry, AUDIT_TX_OPTIONS, type Tx } from "../lib/audit.js";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors.js";
 
@@ -115,6 +116,21 @@ router.get("/boards/:boardId/sprints", requireAuth, async (req, res, next) => {
       where: { boardId: board.id },
       orderBy: { createdAt: "asc" },
       include: { _count: { select: { cards: true } } },
+    });
+    res.json(sprints);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Planned and active sprints across the workspace, for pickers that aren't
+// scoped to one board (e.g. "this agent's access ends with sprint X").
+router.get("/workspaces/:workspaceId/sprints", requireAuth, requireWorkspaceMember, async (req, res, next) => {
+  try {
+    const sprints = await prisma.sprint.findMany({
+      where: { workspaceId: req.ctx!.workspaceId, status: { in: ["ACTIVE", "PLANNED"] } },
+      orderBy: [{ status: "desc" }, { createdAt: "asc" }], // enum order PLANNED < ACTIVE: active first
+      select: { id: true, name: true, status: true, endsAt: true, board: { select: { id: true, title: true } } },
     });
     res.json(sprints);
   } catch (err) {
@@ -245,6 +261,24 @@ router.post("/sprints/:sprintId/complete", requireAuth, async (req, res, next) =
         where: { id: sprint.id },
         data: { status: "COMPLETED", completedAt: new Date() },
       });
+      // G14: agents brought in for this sprint lose access with it — their
+      // live grants die now, not at their natural expiry.
+      const bound = await tx.agent.findMany({ where: { accessSprintId: sprint.id }, select: { id: true } });
+      for (const agent of bound) {
+        const revoked = await tx.agentGrant.updateMany({
+          where: { agentId: agent.id, revokedAt: null, expiresAt: { gt: new Date() } },
+          data: { revokedAt: new Date() },
+        });
+        await appendAuditEntry(tx, {
+          workspaceId: sprint.workspaceId,
+          actorId: req.user!.actorId,
+          action: "AGENT.ACCESS_ENDED",
+          targetType: "Agent",
+          targetId: agent.id,
+          result: "SUCCESS",
+          resource: `${sprint.name} completed; ${revoked.count} live grants revoked`,
+        });
+      }
       await appendAuditEntry(tx, {
         workspaceId: sprint.workspaceId,
         actorId: req.user!.actorId,
