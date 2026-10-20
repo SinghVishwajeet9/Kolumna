@@ -80,7 +80,8 @@ beforeAll(async () => {
   };
   await api("PATCH", `/workspaces/${workspaceId}/agents/${agent.id}/activate`);
   await api("PATCH", `/cards/${cardId}`, { assigneeId: agent.actorId });
-});
+  // ~10 sequential HTTP calls against a remote DB (roadmap G19) — slow but real.
+}, 120_000);
 
 afterAll(async () => {
   server?.close();

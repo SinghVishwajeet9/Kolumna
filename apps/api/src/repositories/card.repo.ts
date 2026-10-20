@@ -1,5 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import type { TenantContext } from "../lib/tenant-context.js";
+import { allocateCardNumber } from "../lib/keys.js";
+import { AUDIT_TX_OPTIONS } from "../lib/audit.js";
 
 export async function listByListId(ctx: TenantContext, listId: string) {
   return prisma.card.findMany({
@@ -13,10 +15,34 @@ export async function createCard(
   listId: string,
   title: string,
   rank: number,
+  sprintId?: string | null, // undefined = "whatever sprint is active"
 ) {
-  return prisma.card.create({
-    data: { title, rank, listId, workspaceId: ctx.workspaceId },
-  });
+  return prisma.$transaction(async (tx) => {
+    // The list decides the board — and the composite FK guarantees the pair
+    // is consistent, so a card can't be created "on" a board its list isn't on.
+    const list = await tx.list.findFirstOrThrow({
+      where: { id: listId, workspaceId: ctx.workspaceId },
+      select: { boardId: true },
+    });
+    const number = await allocateCardNumber(tx, list.boardId);
+    // Created on the board while a sprint is running → it's part of that
+    // sprint (it would otherwise vanish from the sprint-only board view).
+    const active =
+      sprintId === undefined
+        ? await tx.sprint.findFirst({ where: { boardId: list.boardId, status: "ACTIVE" }, select: { id: true } })
+        : null;
+    return tx.card.create({
+      data: {
+        title,
+        rank,
+        listId,
+        boardId: list.boardId,
+        number,
+        workspaceId: ctx.workspaceId,
+        sprintId: sprintId === undefined ? (active?.id ?? null) : sprintId,
+      },
+    });
+  }, AUDIT_TX_OPTIONS); // concurrent creates queue on the board row lock
 }
 
 export async function findCardAnyWorkspace(actorId: string, cardId: string) {
@@ -33,6 +59,10 @@ export async function updateCard(
     description?: string;
     dueDate?: Date | null;
     assigneeId?: string | null;
+    priority?: "NONE" | "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+    storyPoints?: number | null;
+    epicId?: string | null;
+    sprintId?: string | null;
   },
 ) {
   return prisma.card.updateMany({
@@ -82,9 +112,16 @@ export async function moveCard(
 ) {
   // The target listId comes from the client. Filtering the CARD by
   // workspaceId isn't enough — without this check a card could be moved into
-  // another tenant's list and show up on their board.
+  // another tenant's list and show up on their board. The list must also be
+  // on the card's OWN board: keys like PRM-3 belong to one board, and the
+  // composite FK would reject a cross-board move anyway (as a 500, not a 404).
+  const card = await prisma.card.findFirst({
+    where: { id: cardId, workspaceId: ctx.workspaceId },
+    select: { boardId: true },
+  });
+  if (!card) return { count: 0 };
   const targetList = await prisma.list.findFirst({
-    where: { id: listId, workspaceId: ctx.workspaceId },
+    where: { id: listId, workspaceId: ctx.workspaceId, boardId: card.boardId },
   });
   if (!targetList) return { count: 0 };
 

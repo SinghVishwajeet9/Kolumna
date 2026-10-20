@@ -1,10 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PageLoader } from "@/components/ui/Loader";
 import { api, ApiError } from "@/lib/api-client";
-import type { CardDetails, Member } from "./types";
+import { Select } from "@/components/ui/Select";
+import type { CardDetails, Epic, Member, SprintSummary } from "./types";
+import { PRIORITIES } from "./types";
+import { PRIORITY_META, PriorityIcon } from "./Planning";
 import { ActorBadge } from "./ActorBadge";
 import { ProgressBar } from "./ProgressBar";
+import { AssigneeSelect } from "./AssigneeSelect";
 
 const mono = { fontFamily: "var(--font-mono)" };
 
@@ -14,6 +19,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       {children}
     </h3>
   );
+}
+
+function withCurrent<T extends { id: string }>(all: T[], current: T | null) {
+  return current && !all.some((x) => x.id === current.id) ? [current, ...all] : all;
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-[13px] text-faint">{children}</span>;
 }
 
 function timeAgo(iso: string) {
@@ -47,6 +60,10 @@ export function CardPanel({
     setDescDirtyState(v);
   };
   const [note, setNote] = useState("");
+  const [points, setPoints] = useState("");
+  const pointsDirtyRef = useRef(false);
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [sprints, setSprints] = useState<SprintSummary[]>([]);
   const [newItem, setNewItem] = useState("");
 
   const load = useCallback(async () => {
@@ -55,6 +72,7 @@ export function CardPanel({
       setCard(data);
       setError(null);
       if (!descDirtyRef.current) setDescription(data.description ?? "");
+      if (!pointsDirtyRef.current) setPoints(data.storyPoints?.toString() ?? "");
     } catch {
       setError("Couldn't load this card.");
     }
@@ -70,6 +88,7 @@ export function CardPanel({
           setCard(data);
           setError(null);
           if (!descDirtyRef.current) setDescription(data.description ?? "");
+          if (!pointsDirtyRef.current) setPoints(data.storyPoints?.toString() ?? "");
         },
         () => !cancelled && setError("Couldn't load this card."),
       );
@@ -80,6 +99,15 @@ export function CardPanel({
       clearInterval(t);
     };
   }, [cardId]);
+
+  // The board's epics and sprints, for the pickers. Fetched once per board —
+  // they change far less often than the card does.
+  const boardId = card?.list.boardId;
+  useEffect(() => {
+    if (!boardId) return;
+    api.get<Epic[]>(`/boards/${boardId}/epics`).then(setEpics).catch(() => {});
+    api.get<SprintSummary[]>(`/boards/${boardId}/sprints`).then(setSprints).catch(() => {});
+  }, [boardId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -98,6 +126,19 @@ export function CardPanel({
     onChanged();
   }
 
+  const patch = (data: Record<string, unknown>) => act(() => api.patch(`/cards/${cardId}`, data));
+
+  const savePoints = () => {
+    if (!pointsDirtyRef.current) return;
+    pointsDirtyRef.current = false;
+    const n = points.trim() === "" ? null : Number(points);
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 100)) {
+      setError("Story points must be a whole number from 0 to 100.");
+      return;
+    }
+    void patch({ storyPoints: n });
+  };
+
   const saveDescription = () =>
     descDirty &&
     act(async () => {
@@ -112,15 +153,22 @@ export function CardPanel({
         onClick={(e) => e.stopPropagation()}
       >
         {!card ? (
-          <p className="p-8 text-[14px] text-faint" style={mono}>
-            {error ?? "Loading…"}
-          </p>
+          error ? (
+            <p className="p-8 text-[14px] text-faint" style={mono}>
+              {error}
+            </p>
+          ) : (
+            <PageLoader />
+          )
         ) : (
           <div className="flex flex-col gap-8 p-7">
             <header className="flex items-start justify-between gap-4">
               <div>
                 <p className="mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
-                  {card.list.title}
+                  <span className="text-muted">
+                    {card.board.key}-{card.number}
+                  </span>{" "}
+                  · {card.list.title}
                 </p>
                 <h2 className="text-[22px] font-medium leading-snug text-fg">{card.title}</h2>
               </div>
@@ -138,28 +186,78 @@ export function CardPanel({
               </p>
             )}
 
-            <section>
-              <SectionTitle>Assignee</SectionTitle>
-              <select
-                value={card.assignee?.id ?? ""}
-                onChange={(e) =>
-                  act(() => api.patch(`/cards/${cardId}`, { assigneeId: e.target.value || null }))
-                }
-                className="w-full border border-line bg-surface-2 px-3 py-2.5 text-[14px] text-fg focus:border-accent focus:outline-none"
-                style={{ borderRadius: 8 }}
-              >
-                <option value="">Unassigned</option>
-                {members.map((m) => (
-                  <option
-                    key={m.actorId}
-                    value={m.actorId}
-                    disabled={m.type === "AGENT" && m.agentStatus !== "ACTIVE"}
-                  >
-                    {m.type === "AGENT" ? `AI · ${m.name}` : m.name}
-                    {m.type === "AGENT" && m.agentStatus !== "ACTIVE" ? ` (${m.agentStatus?.toLowerCase()})` : ""}
-                  </option>
-                ))}
-              </select>
+            <section className="grid grid-cols-[110px_1fr] items-center gap-x-4 gap-y-2.5">
+              <FieldLabel>Assignee</FieldLabel>
+              <AssigneeSelect
+                compact
+                members={members}
+                value={card.assignee?.id ?? null}
+                onChange={(assigneeId) => patch({ assigneeId })}
+              />
+
+              <FieldLabel>Priority</FieldLabel>
+              <Select
+                compact
+                value={card.priority}
+                onChange={(priority) => patch({ priority })}
+                options={PRIORITIES.map((p) => ({
+                  value: p,
+                  label: PRIORITY_META[p].label,
+                  icon: <PriorityIcon priority={p} />,
+                }))}
+              />
+
+              <FieldLabel>Story points</FieldLabel>
+              <input
+                inputMode="numeric"
+                value={points}
+                onChange={(e) => {
+                  setPoints(e.target.value.replace(/[^0-9]/g, ""));
+                  pointsDirtyRef.current = true;
+                }}
+                onBlur={savePoints}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                placeholder="—"
+                className="w-full bg-surface-2 px-2.5 py-1.5 text-[13px] text-fg shadow-[inset_0_0_0_1px_var(--color-line)] outline-none placeholder:text-faint hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)] focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
+                style={{ borderRadius: 8, ...mono }}
+              />
+
+              <FieldLabel>Epic</FieldLabel>
+              <Select
+                compact
+                value={card.epic?.id ?? null}
+                onChange={(epicId) => patch({ epicId })}
+                options={[
+                  { value: null, label: "No epic" },
+                  // The card's own epic counts even before the board's list
+                  // arrives, so the field never flashes "No epic".
+                  ...withCurrent(epics, card.epic).map((e) => ({
+                    value: e.id,
+                    label: e.title,
+                    icon: <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: e.color }} />,
+                  })),
+                ]}
+              />
+
+              <FieldLabel>Sprint</FieldLabel>
+              <Select
+                compact
+                value={card.sprint?.id ?? null}
+                onChange={(sprintId) => patch({ sprintId })}
+                options={[
+                  { value: null, label: "Backlog" },
+                  // Finished sprints can't take new work; one only appears
+                  // here when it's where this card already lives.
+                  ...withCurrent(sprints, card.sprint)
+                    .filter((s) => s.status !== "COMPLETED" || s.id === card.sprint?.id)
+                    .map((s) => ({
+                      value: s.id,
+                      label: s.name,
+                      note: s.status === "ACTIVE" ? "active" : s.status === "COMPLETED" ? "completed" : undefined,
+                      disabled: s.status === "COMPLETED",
+                    })),
+                ]}
+              />
             </section>
 
             <section>
@@ -173,7 +271,7 @@ export function CardPanel({
                 onBlur={saveDescription}
                 rows={4}
                 placeholder="What needs doing, where, and how to tell it's done — agents read this."
-                className="w-full resize-y border border-line bg-surface-2 px-3 py-2.5 text-[14px] leading-relaxed text-fg placeholder:text-faint focus:border-accent focus:outline-none"
+                className="w-full resize-y border border-line bg-surface-2 px-3 py-2.5 text-[14px] leading-relaxed text-fg placeholder:text-faint focus:border-white/40 focus:outline-none"
                 style={{ borderRadius: 8 }}
               />
             </section>
@@ -232,7 +330,7 @@ export function CardPanel({
                       onChange={(e) =>
                         act(() => api.patch(`/checklist-items/${item.id}`, { done: e.target.checked }))
                       }
-                      className="mt-1 accent-[#5af7b3]"
+                      className="mt-1 accent-[#e5e5e5]"
                     />
                     <div className="min-w-0">
                       <span className={`text-[14px] ${item.done ? "text-faint line-through" : "text-fg"}`}>
@@ -268,7 +366,7 @@ export function CardPanel({
                   value={newItem}
                   onChange={(e) => setNewItem(e.target.value)}
                   placeholder="+ add a step"
-                  className="w-full border-b border-line bg-transparent py-2 text-[14px] text-fg placeholder:text-faint focus:border-accent focus:outline-none"
+                  className="w-full border-b border-line bg-transparent py-2 text-[14px] text-fg placeholder:text-faint focus:border-white/40 focus:outline-none"
                 />
               </form>
             </section>
@@ -303,7 +401,7 @@ export function CardPanel({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Write a note — Enter to post"
-                  className="w-full border border-line bg-surface-2 px-3 py-2.5 text-[14px] text-fg placeholder:text-faint focus:border-accent focus:outline-none"
+                  className="w-full border border-line bg-surface-2 px-3 py-2.5 text-[14px] text-fg placeholder:text-faint focus:border-white/40 focus:outline-none"
                   style={{ borderRadius: 8 }}
                 />
               </form>

@@ -9,10 +9,12 @@ import { CardTile } from "./CardTile";
 
 export function Column({
   list,
+  boardKey,
   onOpenCard,
   onAddCard,
 }: {
   list: BoardList;
+  boardKey: string;
   onOpenCard: (cardId: string) => void;
   onAddCard: (listId: string, title: string) => Promise<void>;
 }) {
@@ -31,11 +33,12 @@ export function Column({
 
   return (
     <section
-      className="flex w-[280px] shrink-0 flex-col bg-[#1a1a1c] p-1.5 outline outline-1 transition-[outline-color]"
+      className="flex w-[280px] shrink-0 flex-col bg-[#1a1a1c] p-1.5 transition-shadow"
       style={{
         borderRadius: "12px",
-        // A thin white outline while a card is dragged over — no colour wash.
-        outlineColor: isOver ? "rgba(255,255,255,0.35)" : "transparent",
+        // A thin white line while a card is dragged over — inset, so the
+        // scrolling row can never clip it (an outline draws OUTSIDE the box).
+        boxShadow: isOver ? "inset 0 0 0 1px rgba(255,255,255,0.35)" : "none",
         maxHeight: "calc(100vh - 150px)",
       }}
     >
@@ -47,7 +50,7 @@ export function Column({
       <div ref={setNodeRef} className="flex min-h-[8px] flex-1 flex-col gap-1.5 overflow-y-auto">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
-            <CardTile key={card.id} card={card} onOpen={() => onOpenCard(card.id)} />
+            <CardTile key={card.id} card={card} boardKey={boardKey} onOpen={() => onOpenCard(card.id)} />
           ))}
         </SortableContext>
       </div>
@@ -62,7 +65,7 @@ export function Column({
               onBlur={() => !title && setAdding(false)}
               onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
               placeholder="What needs to be done? — Enter"
-              className="w-full bg-[#262628] px-3 py-2.5 text-[14px] text-fg outline outline-1 outline-white/30 placeholder:text-faint focus:outline-white/50"
+              className="w-full bg-[#262628] px-3 py-2.5 text-[14px] text-fg shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]"
               style={{ borderRadius: "8px" }}
             />
           </form>

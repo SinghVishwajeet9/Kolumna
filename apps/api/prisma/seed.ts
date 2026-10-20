@@ -6,6 +6,11 @@
 
 import { prisma } from "../src/lib/prisma.js";
 
+// Cards need their board and a per-board number (PR-1, PR-2…).
+function numbered<T>(boardId: string, cards: T[]) {
+  return cards.map((c, i) => ({ ...c, boardId, number: i + 1 }));
+}
+
 async function main() {
   // Wipe existing data first so this script is safe to re-run.
   // Order matters: children before parents, or foreign keys reject the delete.
@@ -47,7 +52,7 @@ async function main() {
   });
 
   const acmeBoard = await prisma.board.create({
-    data: { title: "Product Roadmap", workspaceId: acme.id },
+    data: { title: "Product Roadmap", key: "PR", nextCardNumber: 5, workspaceId: acme.id },
   });
 
   const acmeLists = await Promise.all(
@@ -63,7 +68,7 @@ async function main() {
   );
 
   await prisma.card.createMany({
-    data: [
+    data: numbered(acmeBoard.id, [
       {
         title: "Design the onboarding flow",
         rank: 1.0,
@@ -88,7 +93,7 @@ async function main() {
         listId: acmeLists[2]!.id,
         workspaceId: acme.id,
       },
-    ],
+    ]),
   });
 
   // --- Tenant 2: Globex, owned by Bob ---------------------------------
@@ -118,7 +123,7 @@ async function main() {
   });
 
   const globexBoard = await prisma.board.create({
-    data: { title: "Q3 Launch", workspaceId: globex.id },
+    data: { title: "Q3 Launch", key: "QL", nextCardNumber: 3, workspaceId: globex.id },
   });
 
   const globexLists = await Promise.all(
@@ -134,7 +139,7 @@ async function main() {
   );
 
   await prisma.card.createMany({
-    data: [
+    data: numbered(globexBoard.id, [
       {
         title: "Draft the launch announcement",
         rank: 1.0,
@@ -147,7 +152,7 @@ async function main() {
         listId: globexLists[1]!.id,
         workspaceId: globex.id,
       },
-    ],
+    ]),
   });
 
   console.log("Seeded:");

@@ -6,6 +6,8 @@
 
 import { prisma } from "../lib/prisma.js";
 import type { TenantContext } from "../lib/tenant-context.js";
+import { uniqueBoardKey } from "../lib/keys.js";
+import { AUDIT_TX_OPTIONS } from "../lib/audit.js";
 
 export async function listBoards(ctx: TenantContext) {
   return prisma.board.findMany({
@@ -70,10 +72,51 @@ export async function findBoardAnyWorkspace(actorId: string, boardId: string) {
   });
 }
 
-export async function createBoard(ctx: TenantContext, title: string) {
-  return prisma.board.create({
-    data: { title, workspaceId: ctx.workspaceId },
+// The board page. With an ACTIVE sprint it shows only that sprint's cards
+// (Jira Scrum); everything else waits on the backlog page. Without one, it
+// shows every card, as before.
+export async function getBoardView(actorId: string, boardId: string) {
+  const access = await prisma.board.findFirst({
+    where: { id: boardId, workspace: { members: { some: { actorId } } } },
+    select: { id: true },
   });
+  if (!access) return null;
+
+  const activeSprint = await prisma.sprint.findFirst({
+    where: { boardId, status: "ACTIVE" },
+    select: { id: true, name: true, goal: true, startsAt: true, endsAt: true },
+  });
+
+  const board = await prisma.board.findUnique({
+    where: { id: boardId },
+    include: {
+      lists: {
+        orderBy: { rank: "asc" },
+        include: {
+          cards: {
+            where: activeSprint ? { sprintId: activeSprint.id } : {},
+            orderBy: { rank: "asc" },
+            include: {
+              assignee: { select: { id: true, displayName: true, type: true } },
+              checklistItems: { select: { done: true } },
+              epic: { select: { id: true, title: true, color: true } },
+              _count: { select: { comments: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  return board && { ...board, activeSprint };
+}
+
+export async function createBoard(ctx: TenantContext, title: string) {
+  return prisma.$transaction(async (tx) =>
+    tx.board.create({
+      data: { title, workspaceId: ctx.workspaceId, key: await uniqueBoardKey(tx, ctx.workspaceId, title) },
+    }),
+    AUDIT_TX_OPTIONS,
+  );
 }
 
 export async function updateBoard(ctx: TenantContext, boardId: string, title: string) {

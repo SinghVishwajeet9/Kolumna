@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PageLoader } from "@/components/ui/Loader";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Field } from "@/components/ui/Field";
@@ -187,7 +188,7 @@ export default function AgentsPage() {
 
         {error && <p className="mb-6 text-[14px] text-[#fca5a5]">{error}</p>}
 
-        {!loaded && <p className="text-[15px] text-faint" style={mono}>Loading…</p>}
+        {!loaded && <PageLoader />}
 
         {loaded && agents.length === 0 && !error && (
           <div className="relative border border-dashed border-line px-8 py-16 text-center" style={{ borderRadius: 14 }}>

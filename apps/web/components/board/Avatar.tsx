@@ -5,7 +5,9 @@ import type { ActorRef } from "./types";
 // robot glyph rather than colour, so the board stays quiet; the full name is
 // in the tooltip.
 export function Avatar({ actor }: { actor: ActorRef | null }) {
-  const base = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px]";
+  // leading-none + a block-level icon: an inline SVG (or text) keeps room for
+  // descenders below it, which pushes it off the circle's centre.
+  const base = "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] leading-none";
   if (!actor) {
     return (
       <span className={`${base} border border-dashed border-line-bright text-faint`} title="Unassigned" />
@@ -14,7 +16,7 @@ export function Avatar({ actor }: { actor: ActorRef | null }) {
   if (actor.type === "AGENT") {
     return (
       <span className={`${base} border border-line-bright bg-surface text-fg`} title={`${actor.displayName} (AI agent)`}>
-        <Robot size={13} weight="fill" />
+        <Robot size={13} weight="fill" className="block" />
       </span>
     );
   }

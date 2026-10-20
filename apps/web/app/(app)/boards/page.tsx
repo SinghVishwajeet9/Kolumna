@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PageLoader } from "@/components/ui/Loader";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { LogoMark } from "@/components/Logo";
@@ -121,11 +122,7 @@ export default function BoardsPage() {
           </GooeyButton>
         </div>
 
-        {loading && (
-          <p className="text-[15px] text-faint" style={{ fontFamily: "var(--font-mono)" }}>
-            Loading…
-          </p>
-        )}
+        {loading && <PageLoader />}
 
         {!loading && error && (
           <div className="flex items-center gap-4 text-[15px] text-muted">

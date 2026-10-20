@@ -6,15 +6,19 @@ import { CheckSquare, ChatCircle } from "@phosphor-icons/react";
 import type { BoardCard } from "./types";
 import { progressOf } from "./types";
 import { Avatar } from "./Avatar";
+import { CardKey, EpicChip, PointsChip, PriorityIcon } from "./Planning";
 
-// Compact card in the Jira-style layout: title, then one footer row —
-// checklist progress and note count on the left, assignee on the right.
+// Compact card in the Jira-style layout: title, its epic, then one footer
+// row — key, checklist progress and note count on the left; points,
+// priority and assignee on the right.
 export function CardTile({
   card,
+  boardKey,
   onOpen,
   overlay = false,
 }: {
   card: BoardCard;
+  boardKey: string;
   onOpen?: () => void;
   overlay?: boolean;
 }) {
@@ -30,19 +34,28 @@ export function CardTile({
       {...(overlay ? {} : attributes)}
       {...(overlay ? {} : listeners)}
       onClick={onOpen}
-      className="group cursor-pointer bg-[#262628] px-3 py-2.5 outline outline-1 outline-transparent transition-[outline-color,background-color] hover:bg-[#2b2b2e] hover:outline-white/25"
+      // Lines are INSET shadows, not outlines: an outline draws outside the
+      // box and the column's scroll area clips it.
+      className="group cursor-pointer bg-[#262628] outline-none focus-visible:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.25)] transition-[box-shadow,background-color] hover:bg-[#2b2b2e] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)]"
       style={{
         borderRadius: "8px",
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging && !overlay ? 0.35 : 1,
-        boxShadow: overlay ? "0 16px 32px -10px rgba(0,0,0,0.8)" : "0 1px 0 rgba(0,0,0,0.25)",
-        outlineColor: overlay ? "rgba(255,255,255,0.35)" : undefined,
+        boxShadow: overlay
+          ? "inset 0 0 0 1px rgba(255,255,255,0.35), 0 16px 32px -10px rgba(0,0,0,0.8)"
+          : undefined,
       }}
     >
       <p className="text-[14px] leading-snug text-fg">{card.title}</p>
+      {card.epic && (
+        <div className="mt-2 flex">
+          <EpicChip epic={card.epic} />
+        </div>
+      )}
 
       <div className="mt-2.5 flex items-center gap-3">
+        <CardKey boardKey={boardKey} number={card.number} />
         {p.total > 0 && (
           <span
             className={`flex items-center gap-1 text-[12px] ${p.done === p.total ? "text-fg" : "text-faint"}`}
@@ -58,7 +71,9 @@ export function CardTile({
             {card._count.comments}
           </span>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-2">
+          <PointsChip points={card.storyPoints} />
+          {card.priority !== "NONE" && <PriorityIcon priority={card.priority} />}
           <Avatar actor={card.assignee} />
         </span>
       </div>

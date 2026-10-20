@@ -8,8 +8,6 @@ import {
   Robot,
   Pulse,
   ListChecks,
-  Lightning,
-  StackSimple,
   SidebarSimple,
   SignOut,
   type Icon,
@@ -155,6 +153,9 @@ export function Sidebar() {
   // element's style — no React state, so moving it never re-renders the
   // sidebar. Re-measured when the route, the board list (which shifts item
   // positions) or the collapsed width changes.
+  const currentBoardId = pathname.match(/^\/b\/([^/]+)/)?.[1];
+  const planningBoard = boards.find((b) => b.id === currentBoardId) ?? boards[0];
+
   const navRef = useRef<HTMLElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
   const placedOnce = useRef(false);
@@ -180,7 +181,7 @@ export function Sidebar() {
       pill.style.transition = PILL_TRANSITION;
       placedOnce.current = true;
     }
-  }, [pathname, boards.length, collapsed]);
+  }, [pathname, boards.length, collapsed, planningBoard?.id]);
 
   const initials = (user?.name ?? "?")
     .split(/\s+/)
@@ -265,10 +266,20 @@ export function Sidebar() {
           </>
         )}
 
-        <SectionLabel collapsed={collapsed}>Planning</SectionLabel>
-        <NavItem href="#" label="Backlog" icon={ListChecks} active={false} collapsed={collapsed} disabled />
-        <NavItem href="#" label="Sprints" icon={Lightning} active={false} collapsed={collapsed} disabled />
-        <NavItem href="#" label="Epics" icon={StackSimple} active={false} collapsed={collapsed} disabled />
+        {planningBoard && (
+          <>
+            {/* Sprints and epics live on the backlog page, as in Jira. It
+                follows the board you're on, else your first board. */}
+            <SectionLabel collapsed={collapsed}>Planning · {planningBoard.title}</SectionLabel>
+            <NavItem
+              href={`/b/${planningBoard.id}/backlog`}
+              label="Backlog & sprints"
+              icon={ListChecks}
+              active={pathname === `/b/${planningBoard.id}/backlog`}
+              collapsed={collapsed}
+            />
+          </>
+        )}
       </nav>
 
       {/* Account */}

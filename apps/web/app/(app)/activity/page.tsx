@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
+import { PageLoader } from "@/components/ui/Loader";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -147,7 +148,7 @@ export default function ActivityPage() {
           ))}
         </div>
 
-        {!loaded && <p className="text-[15px] text-faint" style={mono}>Loading…</p>}
+        {!loaded && <PageLoader />}
         {loaded && shown.length === 0 && <p className="text-[15px] text-faint">Nothing here yet.</p>}
 
         <ol className="border border-line bg-surface" style={{ borderRadius: 14 }}>

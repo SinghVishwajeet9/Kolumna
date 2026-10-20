@@ -7,6 +7,7 @@
 
 import { prisma } from "../src/lib/prisma.js";
 import { writeAuditEntry } from "../src/lib/audit.js";
+import { allocateCardNumber } from "../src/lib/keys.js";
 
 const COLUMNS = ["To Do", "In Progress", "Done"];
 
@@ -61,7 +62,14 @@ async function main() {
   });
   const top = await prisma.card.findFirst({ where: { listId: todo!.id }, orderBy: { rank: "desc" } });
   const card = await prisma.card.create({
-    data: { title: cardTitle, listId: todo!.id, workspaceId: board.workspaceId, rank: top ? top.rank + 1 : 1 },
+    data: {
+      title: cardTitle,
+      listId: todo!.id,
+      boardId: board.id,
+      number: await prisma.$transaction((tx) => allocateCardNumber(tx, board.id)),
+      workspaceId: board.workspaceId,
+      rank: top ? top.rank + 1 : 1,
+    },
   });
   await audit("CARD.CREATE", "Card", card.id);
   console.log(`Added card "${cardTitle}" to To Do`);

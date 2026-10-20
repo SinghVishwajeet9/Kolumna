@@ -77,9 +77,13 @@ beforeAll(async () => {
   workspaceId = ws.id;
   created.workspaceIds.push(ws.id);
 
-  const board = await prisma.board.create({ data: { title: "B", workspaceId } });
+  const board = await prisma.board.create({ data: { title: "B", key: "B", nextCardNumber: 2, workspaceId } });
   const list = await prisma.list.create({ data: { title: "L", boardId: board.id, workspaceId, rank: 1 } });
-  cardId = (await prisma.card.create({ data: { title: "Fix the thing", listId: list.id, workspaceId, rank: 1 } })).id;
+  cardId = (
+    await prisma.card.create({
+      data: { title: "Fix the thing", listId: list.id, boardId: board.id, number: 1, workspaceId, rank: 1 },
+    })
+  ).id;
 
   const agent = await makeAgent({ allowedScopes: ["card:read", "card:write"] });
   agentId = agent.id;
@@ -90,10 +94,12 @@ beforeAll(async () => {
   // A second tenant whose card the agent must never reach.
   const other = await prisma.workspace.create({ data: { name: "Other", slug: `tools-other-${runTag}` } });
   created.workspaceIds.push(other.id);
-  const ob = await prisma.board.create({ data: { title: "OB", workspaceId: other.id } });
+  const ob = await prisma.board.create({ data: { title: "OB", key: "OB", nextCardNumber: 2, workspaceId: other.id } });
   const ol = await prisma.list.create({ data: { title: "OL", boardId: ob.id, workspaceId: other.id, rank: 1 } });
   otherTenantCardId = (
-    await prisma.card.create({ data: { title: "Secret", listId: ol.id, workspaceId: other.id, rank: 1 } })
+    await prisma.card.create({
+      data: { title: "Secret", listId: ol.id, boardId: ob.id, number: 1, workspaceId: other.id, rank: 1 },
+    })
   ).id;
 });
 

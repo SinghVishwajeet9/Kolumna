@@ -27,6 +27,9 @@ router.get("/cards/:cardId/details", requireAuth, async (req, res, next) => {
         where: { id },
         include: {
           list: { select: { id: true, title: true, boardId: true } },
+          board: { select: { key: true } }, // with `number` → "LB-1"
+          epic: { select: { id: true, title: true, color: true } },
+          sprint: { select: { id: true, name: true, status: true } },
           assignee: { select: { id: true, displayName: true, type: true } },
           checklistItems: { orderBy: { rank: "asc" } },
           comments: {

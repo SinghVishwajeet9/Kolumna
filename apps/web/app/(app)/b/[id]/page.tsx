@@ -15,13 +15,15 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { Plus } from "@phosphor-icons/react";
+import { Plus, Lightning, ListChecks } from "@phosphor-icons/react";
+import { PageLoader } from "@/components/ui/Loader";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Column } from "@/components/board/Column";
 import { CardTile } from "@/components/board/CardTile";
 import { CardPanel } from "@/components/board/CardPanel";
 import type { Board, BoardCard, Member } from "@/components/board/types";
+import { daysLeft } from "@/components/board/types";
 
 const mono = { fontFamily: "var(--font-mono)" };
 const POLL_MS = 5000;
@@ -181,16 +183,31 @@ export default function BoardPage() {
           ← boards
         </Link>
         <div className="mt-3 flex items-end justify-between gap-4">
-          <h1 className="text-[clamp(1.6rem,3vw,2.4rem)] font-medium tracking-[-0.02em]" style={mono}>
-            {board?.title ?? " "}
-          </h1>
-          <span className="flex items-center gap-2 text-[12px] text-faint" style={mono}>
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            live · agents&apos; updates appear here
-          </span>
+          <div className="min-w-0">
+            <h1 className="flex items-baseline gap-3 text-[clamp(1.6rem,3vw,2.4rem)] font-medium tracking-[-0.02em]" style={mono}>
+              {board?.title ?? " "}
+              {board && <span className="text-[14px] font-normal tracking-normal text-faint">{board.key}</span>}
+            </h1>
+            {board && <SprintLine board={board} />}
+          </div>
+          <div className="flex shrink-0 items-center gap-5">
+            <Link
+              href={`/b/${boardId}/backlog`}
+              className="flex items-center gap-1.5 text-[13px] text-faint transition-colors hover:text-fg"
+              style={mono}
+            >
+              <ListChecks size={15} /> backlog
+            </Link>
+            <span className="flex items-center gap-2 text-[12px] text-faint" style={mono}>
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+              live
+            </span>
+          </div>
         </div>
         {error && <p className="mt-3 text-[13px] text-[#fca5a5]">{error}</p>}
       </div>
+
+      {!board && !error && <PageLoader />}
 
       {board && (
         <DndContext
@@ -207,7 +224,7 @@ export default function BoardPage() {
         >
           <div className="flex items-start gap-3 overflow-x-auto px-6 pb-10 lg:px-10">
             {board.lists.map((list) => (
-              <Column key={list.id} list={list} onOpenCard={setOpenCardId} onAddCard={addCard} />
+              <Column key={list.id} list={list} boardKey={board.key} onOpenCard={setOpenCardId} onAddCard={addCard} />
             ))}
 
             <div className="w-[280px] shrink-0">
@@ -219,7 +236,7 @@ export default function BoardPage() {
                     onChange={(e) => setColumnTitle(e.target.value)}
                     onBlur={() => !columnTitle && setAddingColumn(false)}
                     placeholder="Column name — Enter to add"
-                    className="w-full bg-[#1a1a1c] px-3 py-2.5 text-[14px] text-fg outline outline-1 outline-white/30 placeholder:text-faint focus:outline-white/50"
+                    className="w-full bg-[#1a1a1c] px-3 py-2.5 text-[14px] text-fg shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]"
                     style={{ borderRadius: 12 }}
                   />
                 </form>
@@ -236,7 +253,7 @@ export default function BoardPage() {
             </div>
           </div>
 
-          <DragOverlay>{activeCard && <CardTile card={activeCard} overlay />}</DragOverlay>
+          <DragOverlay>{activeCard && <CardTile card={activeCard} boardKey={board.key} overlay />}</DragOverlay>
         </DndContext>
       )}
 
@@ -249,5 +266,35 @@ export default function BoardPage() {
         />
       )}
     </main>
+  );
+}
+
+// Which slice of work the board is showing: the running sprint (and only its
+// cards), or — with no sprint running — everything.
+function SprintLine({ board }: { board: Board }) {
+  const s = board.activeSprint;
+  if (!s) {
+    return (
+      <p className="mt-2 text-[13px] text-faint">
+        No sprint running — showing every card.{" "}
+        <Link href={`/b/${board.id}/backlog`} className="text-muted underline-offset-4 hover:text-fg hover:underline">
+          Plan one
+        </Link>
+      </p>
+    );
+  }
+  const left = daysLeft(s.endsAt);
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
+      <span className="flex items-center gap-1.5 text-fg">
+        <Lightning size={14} weight="fill" /> {s.name}
+      </span>
+      {s.goal && <span className="text-faint">· {s.goal}</span>}
+      {left !== null && (
+        <span className={left < 0 ? "text-[#fca5a5]" : "text-faint"} style={mono}>
+          · {left < 0 ? `${-left}d overdue` : `${left}d left`}
+        </span>
+      )}
+    </p>
   );
 }

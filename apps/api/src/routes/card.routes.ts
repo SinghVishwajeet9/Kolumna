@@ -11,7 +11,12 @@ import { NotFoundError, ValidationError } from "../lib/errors.js";
 
 const router = Router();
 
-const createCardSchema = z.object({ title: z.string().min(1) });
+const createCardSchema = z.object({
+  title: z.string().min(1),
+  // Omitted → joins the board's active sprint (if any). null → the backlog;
+  // an id → that planned/active sprint. The backlog page uses the explicit forms.
+  sprintId: z.string().nullable().optional(),
+});
 const updateCardSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -19,6 +24,11 @@ const updateCardSchema = z.object({
   // The assignee can be a human OR an agent — both are just Actors as of
   // Phase 0. null unassigns; omitted leaves it untouched.
   assigneeId: z.string().optional().nullable(),
+  priority: z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  // null = no epic / back to the backlog. Both must be on the card's board.
+  epicId: z.string().nullable().optional(),
+  sprintId: z.string().nullable().optional(),
 });
 const moveCardSchema = z.object({
   listId: z.string(),
@@ -36,7 +46,12 @@ router.post("/lists/:listId/cards", requireAuth, async (req, res, next) => {
 
     const ctx = { workspaceId: list.workspaceId, actorId: req.user!.actorId };
     const rank = await cardRepo.getMaxRank(ctx, list.id);
-    const card = await cardRepo.createCard(ctx, list.id, parsed.data.title, rank);
+    if (parsed.data.sprintId) {
+      const sprint = await prisma.sprint.findFirst({ where: { id: parsed.data.sprintId, boardId: list.boardId } });
+      if (!sprint) throw new ValidationError("Sprint is not on this list's board");
+      if (sprint.status === "COMPLETED") throw new ValidationError("That sprint is already completed");
+    }
+    const card = await cardRepo.createCard(ctx, list.id, parsed.data.title, rank, parsed.data.sprintId);
     await writeAuditEntry({
       workspaceId: ctx.workspaceId,
       actorId: ctx.actorId,
@@ -79,6 +94,17 @@ router.patch("/cards/:cardId", requireAuth, async (req, res, next) => {
       if (agent && agent.status !== "ACTIVE") {
         throw new ValidationError(`Can't assign work to an agent that is ${agent.status}`);
       }
+    }
+    // Epics and sprints are per board: reject one from any other board (incl.
+    // another tenant's), and don't let work into a sprint that's finished.
+    if (rest.epicId) {
+      const epic = await prisma.epic.findFirst({ where: { id: rest.epicId, boardId: card.boardId } });
+      if (!epic) throw new ValidationError("Epic is not on this card's board");
+    }
+    if (rest.sprintId) {
+      const sprint = await prisma.sprint.findFirst({ where: { id: rest.sprintId, boardId: card.boardId } });
+      if (!sprint) throw new ValidationError("Sprint is not on this card's board");
+      if (sprint.status === "COMPLETED") throw new ValidationError("That sprint is already completed");
     }
 
     await cardRepo.updateCard(ctx, card.id, {

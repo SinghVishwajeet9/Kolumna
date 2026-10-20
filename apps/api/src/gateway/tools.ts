@@ -18,6 +18,7 @@ import {
   type Tx,
 } from "../lib/audit.js";
 import { parseScopes, type Scope } from "./scopes.js";
+import { allocateCardNumber } from "../lib/keys.js";
 
 // What the CALLER supplies. Deliberately not workspaceId/actorId/scopes —
 // those are derived from the grant row, so a caller can't claim authority it
@@ -537,6 +538,8 @@ export const createTaskTool = defineTool({
       data: {
         workspaceId: ctx.workspaceId,
         listId: list.id,
+        boardId: input.boardId,
+        number: await allocateCardNumber(ctx.tx, input.boardId),
         title: input.title,
         description: input.description ?? null,
         rank: await nextCardRank(ctx.tx, ctx.workspaceId, list.id),
