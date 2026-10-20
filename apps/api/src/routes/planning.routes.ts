@@ -59,16 +59,20 @@ router.get("/boards/:boardId/epics", requireAuth, async (req, res, next) => {
   try {
     const board = await requireBoard(req.user!.actorId, req.params.boardId!);
     const done = await doneListId(prisma, board.id);
-    const epics = await prisma.epic.findMany({
-      where: { boardId: board.id },
-      orderBy: { createdAt: "asc" },
-      include: { cards: { select: { listId: true } } },
-    });
+    const [epics, costs] = await Promise.all([
+      prisma.epic.findMany({
+        where: { boardId: board.id },
+        orderBy: { createdAt: "asc" },
+        include: { cards: { select: { listId: true } } },
+      }),
+      prisma.costEvent.groupBy({ by: ["epicId"], where: { boardId: board.id, epicId: { not: null } }, _sum: { costUsd: true } }),
+    ]);
     res.json(
       epics.map(({ cards, ...e }) => ({
         ...e,
         cardCount: cards.length,
         doneCount: cards.filter((c) => c.listId === done).length,
+        costUsd: costs.find((c) => c.epicId === e.id)?._sum.costUsd?.toFixed(2) ?? null,
       })),
     );
   } catch (err) {
@@ -304,7 +308,7 @@ router.post("/sprints/:sprintId/complete", requireAuth, async (req, res, next) =
 router.get("/boards/:boardId/backlog", requireAuth, async (req, res, next) => {
   try {
     const board = await requireBoard(req.user!.actorId, req.params.boardId!);
-    const [sprints, backlog, lists] = await Promise.all([
+    const [sprints, backlog, lists, costs] = await Promise.all([
       prisma.sprint.findMany({
         where: { boardId: board.id, status: { in: ["ACTIVE", "PLANNED"] } },
         orderBy: { createdAt: "asc" },
@@ -312,6 +316,7 @@ router.get("/boards/:boardId/backlog", requireAuth, async (req, res, next) => {
       }),
       prisma.card.findMany({ where: { boardId: board.id, sprintId: null }, include: backlogCardInclude }),
       prisma.list.findMany({ where: { boardId: board.id }, orderBy: { rank: "asc" }, select: { id: true, title: true } }),
+      prisma.costEvent.groupBy({ by: ["sprintId"], where: { boardId: board.id, sprintId: { not: null } }, _sum: { costUsd: true } }),
     ]);
     res.json({
       board,
@@ -320,7 +325,11 @@ router.get("/boards/:boardId/backlog", requireAuth, async (req, res, next) => {
       // Active sprint first, then planned ones in creation order.
       sprints: [...sprints]
         .sort((a, b) => Number(b.status === "ACTIVE") - Number(a.status === "ACTIVE"))
-        .map((s) => ({ ...s, cards: sortCards(s.cards) })),
+        .map((s) => ({
+          ...s,
+          cards: sortCards(s.cards),
+          costUsd: costs.find((c) => c.sprintId === s.id)?._sum.costUsd?.toFixed(2) ?? null,
+        })),
       backlog: sortCards(backlog),
     });
   } catch (err) {

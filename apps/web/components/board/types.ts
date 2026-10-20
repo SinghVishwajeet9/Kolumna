@@ -60,6 +60,7 @@ export type BacklogSprint = {
   startsAt: string | null;
   endsAt: string | null;
   cards: BacklogCard[];
+  costUsd: string | null; // Phase 5: agent spend in this sprint
 };
 
 export type Backlog = {
@@ -70,7 +71,7 @@ export type Backlog = {
   backlog: BacklogCard[];
 };
 
-export type Epic = EpicRef & { description: string | null; cardCount: number; doneCount: number };
+export type Epic = EpicRef & { description: string | null; cardCount: number; doneCount: number; costUsd: string | null };
 export type SprintSummary = { id: string; name: string; status: SprintStatus };
 
 export type Member = {
@@ -98,6 +99,7 @@ export type CardDetails = {
   epic: EpicRef | null;
   sprint: SprintSummary | null;
   reviewThreshold: number | null;
+  cost: { costUsd: string | null; tokens: number; events: number };
   reviews: {
     id: string;
     toolName: string;

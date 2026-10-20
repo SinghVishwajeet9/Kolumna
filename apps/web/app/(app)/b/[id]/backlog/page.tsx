@@ -199,6 +199,7 @@ export default function BacklogPage() {
                 }
                 subtitle={s.goal}
                 cards={s.cards}
+                costUsd={s.costUsd}
                 actions={
                   s.status === "ACTIVE" ? (
                     <SectionButton onClick={() => setCompleting(s)}>Complete sprint</SectionButton>
@@ -303,6 +304,7 @@ function Section({
   cards,
   actions,
   children,
+  costUsd,
 }: {
   dropId: string;
   title: React.ReactNode;
@@ -310,6 +312,7 @@ function Section({
   cards: BacklogCard[];
   actions: React.ReactNode;
   children: React.ReactNode;
+  costUsd?: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: dropId });
   const [open, setOpen] = useState(true);
@@ -331,6 +334,7 @@ function Section({
         <span className="text-[12px] text-faint" style={mono}>
           {cards.length} {cards.length === 1 ? "card" : "cards"}
           {points(cards) > 0 && ` · ${points(cards)} pts`}
+          {costUsd && Number(costUsd) > 0 && ` · $${costUsd} agent cost`}
         </span>
         <span className="ml-auto">{actions}</span>
       </header>
@@ -516,7 +520,7 @@ function EpicStrip({
             key={e.id}
             type="button"
             onClick={() => onFilter(active ? null : e.id)}
-            title={`${e.doneCount} of ${e.cardCount} done — click to ${active ? "show all" : "filter"}`}
+            title={`${e.doneCount} of ${e.cardCount} done${e.costUsd ? ` · $${e.costUsd} agent cost` : ""} — click to ${active ? "show all" : "filter"}`}
             className="flex items-center gap-2 px-2.5 py-1.5 text-[13px] transition-shadow"
             style={{
               borderRadius: 8,

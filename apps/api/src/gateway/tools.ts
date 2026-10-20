@@ -21,6 +21,7 @@ import {
 } from "../lib/audit.js";
 import { parseScopes, type Scope } from "./scopes.js";
 import { decideAutonomy } from "./autonomy.js";
+import { exhaustedBudget, recordCost } from "../lib/cost.js";
 import { allocateCardNumber } from "../lib/keys.js";
 
 // What the CALLER supplies. Deliberately not workspaceId/actorId/scopes —
@@ -69,7 +70,7 @@ export type Tool<S extends z.ZodType = z.ZodType> = {
   gate?: (input: z.infer<S>, tx: Tx, workspaceId: string) => Promise<GateTarget>;
 };
 
-export type GateTarget = { boardId: string; cardId: string | null; summary: string };
+export type GateTarget = { boardId: string; cardId: string | null; sprintId: string | null; summary: string };
 
 // The two extra inputs every gated tool takes. Kept out of each tool's own
 // schema so handlers never see them; describeTools adds them to the
@@ -240,7 +241,7 @@ const cardGate =
   (describe: (key: string, title: string) => string) =>
   async (input: { cardId: string }, tx: Tx, workspaceId: string): Promise<GateTarget> => {
     const card = await findCard(tx, workspaceId, input.cardId);
-    return { boardId: card.boardId, cardId: card.id, summary: describe(keyOf(card), card.title) };
+    return { boardId: card.boardId, cardId: card.id, sprintId: card.sprintId, summary: describe(keyOf(card), card.title) };
   };
 
 // --- Read tools ---------------------------------------------------------------
@@ -542,6 +543,7 @@ export const completeChecklistItemTool = defineTool({
     return {
       boardId: card.boardId,
       cardId: card.id,
+      sprintId: card.sprintId,
       summary: `Tick "${item.title}" on ${keyOf(card)}${input.evidenceUrl ? ` (evidence: ${input.evidenceUrl})` : ""}`,
     };
   },
@@ -742,6 +744,64 @@ export const getSprintTool = defineTool({
   },
 });
 
+// Phase 5. Kolumna can't see inside a connected agent's session, so its spend
+// is whatever it reports — recorded as SELF_REPORTED, never presented as exact.
+export const reportUsageTool = defineTool({
+  name: "report_usage",
+  description:
+    "Report the tokens and/or cost you spent on a card (or in general, without a cardId). Call it when you finish a card or a large step, with the numbers your client shows (e.g. Claude Code's /cost). It feeds the card's, sprint's and epic's cost and the team's budgets.",
+  input: z
+    .object({
+      cardId: cardRef.optional(),
+      tokensIn: z.number().int().min(0).max(1_000_000_000).optional(),
+      tokensOut: z.number().int().min(0).max(1_000_000_000).optional(),
+      costUsd: z.number().min(0).max(100_000).optional().describe("Dollar cost, if your client shows it"),
+      model: z.string().min(1).max(100).optional().describe("e.g. claude-opus-5-5 — used to price tokens when costUsd is missing"),
+      note: z.string().max(500).optional(),
+    })
+    .refine((v) => (v.tokensIn ?? 0) + (v.tokensOut ?? 0) > 0 || v.costUsd !== undefined, {
+      message: "Give token counts and/or costUsd",
+    }),
+  requiredScope: "card:read",
+  auditAction: "AGENT.REPORT_USAGE",
+  handler: async (input, ctx) => {
+    const card = input.cardId ? await findOwnCard(ctx.tx, ctx, input.cardId) : null;
+    const { event, notices } = await recordCost(ctx.tx, {
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      agentId: ctx.agentId,
+      reportedByActorId: ctx.actorId,
+      source: "SELF_REPORTED",
+      cardId: card?.id ?? null,
+      model: input.model ?? null,
+      tokensIn: input.tokensIn ?? 0,
+      tokensOut: input.tokensOut ?? 0,
+      costUsd: input.costUsd ?? null,
+      note: input.note ?? null,
+    });
+    return {
+      output: {
+        recorded: true,
+        costUsd: event.costUsd?.toFixed(6) ?? null,
+        ...(event.costUsd === null && input.model ? { note: `No price set for ${input.model} in this workspace; tokens recorded, cost unknown.` } : {}),
+        ...(notices.length
+          ? {
+              budgets: notices.map((n) => ({ scope: n.scope, used: `${Math.round(n.fraction * 100)}%`, state: n.state })),
+              warning: notices.some((n) => n.state === "EXCEEDED")
+                ? "A budget covering you is used up: your changes will now wait for human approval."
+                : "A budget covering you is close to its limit.",
+            }
+          : {}),
+      },
+      audit: {
+        targetType: card ? "Card" : "Agent",
+        targetId: card?.id ?? ctx.agentId,
+        resource: `${event.tokensIn}+${event.tokensOut} tokens, $${event.costUsd?.toFixed(4) ?? "?"} (self-reported)`,
+      },
+    };
+  },
+});
+
 // --- Workspace-wide writes (their own scopes) --------------------------------
 
 export const createTaskTool = defineTool({
@@ -761,9 +821,13 @@ export const createTaskTool = defineTool({
   auditAction: "AGENT.CREATE_TASK",
   gate: async (input, tx, workspaceId) => {
     const board = await findBoard(tx, workspaceId, input.boardId);
+    const active = input.addToActiveSprint
+      ? await tx.sprint.findFirst({ where: { boardId: board.id, status: "ACTIVE" }, select: { id: true } })
+      : null;
     return {
       boardId: board.id,
       cardId: null,
+      sprintId: active?.id ?? null,
       summary: `Create "${input.title}" on ${board.title} (${input.column}${input.addToActiveSprint ? ", active sprint" : ", backlog"})`,
     };
   },
@@ -818,6 +882,7 @@ export const assignTaskTool = defineTool({
     return {
       boardId: card.boardId,
       cardId: card.id,
+      sprintId: card.sprintId,
       summary: input.assigneeActorId ? `Assign ${keyOf(card)} to ${who?.displayName ?? "an unknown member"}` : `Unassign ${keyOf(card)}`,
     };
   },
@@ -851,6 +916,7 @@ export const tools: Tool[] = [
   getSprintTool,
   moveTicketTool,
   updateTicketTool,
+  reportUsageTool,
   addCommentTool,
   addChecklistItemsTool,
   completeChecklistItemTool,
@@ -950,12 +1016,21 @@ export async function callTool(name: string, input: unknown, call: CallContext) 
       // 4a. Autonomy (Phase 4): may it do this now, or does a human decide?
       if (tool.gate) {
         const target = await tool.gate(parsed.data, tx, identity.workspaceId);
-        const decision = await decideAutonomy(tx, {
-          agent: grant.agent,
-          boardId: target.boardId,
-          cardId: target.cardId,
-          confidence: meta.confidence,
+        // Phase 5: a used-up budget overrides every level — the change can
+        // still happen, but only through a human.
+        const overBudget = await exhaustedBudget(tx, {
+          workspaceId: identity.workspaceId,
+          agentId: identity.agentId,
+          sprintId: target.sprintId,
         });
+        const decision = overBudget
+          ? ({ kind: "REVIEW", reason: "BUDGET_EXCEEDED", why: overBudget } as const)
+          : await decideAutonomy(tx, {
+              agent: grant.agent,
+              boardId: target.boardId,
+              cardId: target.cardId,
+              confidence: meta.confidence,
+            });
         if (decision.kind === "REVIEW") {
           // Dry run: prove the action would succeed right now (ownership,
           // column names…), then undo it — a human should only ever be asked

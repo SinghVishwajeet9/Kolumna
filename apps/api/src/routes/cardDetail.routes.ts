@@ -22,7 +22,7 @@ async function requireCard(actorId: string, cardId: string) {
 router.get("/cards/:cardId/details", requireAuth, async (req, res, next) => {
   try {
     const { id, workspaceId } = await requireCard(req.user!.actorId, req.params.cardId!);
-    const [card, activity] = await Promise.all([
+    const [card, activity, cost] = await Promise.all([
       prisma.card.findUnique({
         where: { id },
         include: {
@@ -47,9 +47,16 @@ router.get("/cards/:cardId/details", requireAuth, async (req, res, next) => {
         },
       }),
       getLineageForTarget(workspaceId, "Card", id),
+      // Phase 5: what agents spent on it (mostly self-reported).
+      prisma.costEvent.aggregate({ where: { cardId: id }, _sum: { costUsd: true, tokensIn: true, tokensOut: true }, _count: true }),
     ]);
     res.json({
       ...card,
+      cost: {
+        costUsd: cost._sum.costUsd?.toFixed(2) ?? null,
+        tokens: (cost._sum.tokensIn ?? 0) + (cost._sum.tokensOut ?? 0),
+        events: cost._count,
+      },
       activity: activity.slice(-30).map((e) => ({
         id: e.id,
         seq: e.seq,

@@ -9,6 +9,7 @@ import {
   Pulse,
   ListChecks,
   SealCheck,
+  CurrencyDollar,
   SidebarSimple,
   SignOut,
   type Icon,
@@ -263,6 +264,7 @@ export function Sidebar() {
           collapsed={collapsed}
           count={pendingApprovals}
         />
+        <NavItem href="/usage" label="Usage" icon={CurrencyDollar} active={pathname.startsWith("/usage")} collapsed={collapsed} />
         <NavItem href="/activity" label="Activity" icon={Pulse} active={pathname.startsWith("/activity")} collapsed={collapsed} />
 
         {boards.length > 0 && (

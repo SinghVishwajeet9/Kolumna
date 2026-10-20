@@ -80,6 +80,9 @@ model Workspace {
   checklistItems   ChecklistItem[]
   epics            Epic[]
   sprints          Sprint[]
+  costEvents       CostEvent[]
+  modelPrices      ModelPrice[]
+  usageBudgets     UsageBudget[]
 }
 
 enum WorkspaceRole {
@@ -144,6 +147,8 @@ model Agent {
   grants           AgentGrant[]
   autonomyPolicies AutonomyPolicy[]
   reviews          ConfidenceReview[]
+  costEvents       CostEvent[]
+  budgets          UsageBudget[]
 
   @@index([workspaceId])
 }
@@ -184,6 +189,7 @@ enum ReviewStatus {
 enum ReviewReason {
   AUTONOMY_LEVEL // the agent may only suggest here
   LOW_CONFIDENCE // below the threshold, or no confidence given
+  BUDGET_EXCEEDED // Phase 5: a budget that covers it is used up
 }
 
 // A gated agent action waiting for a human. Holds the exact tool call; on
@@ -458,6 +464,7 @@ model Card {
   reviews          ConfidenceReview[]
   comments         Comment[]
   checklistItems   ChecklistItem[]
+  costEvents       CostEvent[]
 
   @@unique([boardId, number])
   @@index([listId])
@@ -468,16 +475,17 @@ model Card {
 }
 
 model Epic {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
   workspaceId String
   boardId     String
   title       String
   description String?
-  color       String    @default("#c4b5fd")
-  createdAt   DateTime  @default(now())
+  color       String      @default("#c4b5fd")
+  createdAt   DateTime    @default(now())
   cards       Card[]
-  board       Board     @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  board       Board       @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  costEvents  CostEvent[]
 
   @@index([boardId])
   @@index([workspaceId])
@@ -492,21 +500,107 @@ enum SprintStatus {
 // At most ONE active sprint per board — enforced by a partial unique index
 // added by hand in the migration (Prisma can't express WHERE in @@unique).
 model Sprint {
-  id          String       @id @default(cuid())
-  workspaceId String
-  boardId     String
-  name        String
-  goal        String?
-  status      SprintStatus @default(PLANNED)
-  startsAt    DateTime?
-  endsAt      DateTime?
-  completedAt DateTime?
-  createdAt   DateTime     @default(now())
-  cards       Card[]
-  boundAgents Agent[] // agents whose access ends when this sprint is completed (G14)
-  board       Board        @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id           String        @id @default(cuid())
+  workspaceId  String
+  boardId      String
+  name         String
+  goal         String?
+  status       SprintStatus  @default(PLANNED)
+  startsAt     DateTime?
+  endsAt       DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  cards        Card[]
+  boundAgents  Agent[] // agents whose access ends when this sprint is completed (G14)
+  board        Board         @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  costEvents   CostEvent[]
+  usageBudgets UsageBudget[]
 
   @@index([boardId])
+  @@index([workspaceId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — cost accounting. Money is Decimal, never Float.
+
+enum CostSource {
+  SELF_REPORTED // a connected agent told us (report_usage) — Kolumna can't see inside its session
+  HOSTED_RUN // Kolumna's own worker ran the model (Path B) — exact
+  MANUAL // a human logged it (e.g. from Claude Code's /cost)
+}
+
+// One unit of spend. Card/board/sprint/epic are SNAPSHOTS taken when it was
+// incurred, so a sprint's cost stays what it was even if the card moves on.
+model CostEvent {
+  id                String     @id @default(cuid())
+  workspaceId       String
+  agentId           String?
+  actorId           String // who incurred it (usually the agent's actor)
+  cardId            String?
+  boardId           String?
+  sprintId          String?
+  epicId            String?
+  source            CostSource
+  model             String?
+  tokensIn          Int        @default(0)
+  tokensOut         Int        @default(0)
+  costUsd           Decimal?   @db.Decimal(14, 6) // null = unknown (no price for the model)
+  note              String?
+  reportedByActorId String
+  createdAt         DateTime   @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  card      Card?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  sprint    Sprint?   @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  epic      Epic?     @relation(fields: [epicId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([sprintId])
+  @@index([epicId])
+  @@index([cardId])
+  @@index([agentId, createdAt])
+}
+
+// What a model costs, per workspace (prices change and differ by contract).
+// Used to price token counts that arrive without a dollar figure.
+model ModelPrice {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  model            String
+  inputPerMTokUsd  Decimal  @db.Decimal(12, 6)
+  outputPerMTokUsd Decimal  @db.Decimal(12, 6)
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, model])
+}
+
+// A spending limit. Scope by which ids are set:
+//   sprintId            → that sprint, for its whole life
+//   agentId             → that agent, per calendar month
+//   neither             → the whole workspace, per calendar month
+// Crossing alertAt is recorded once (BUDGET.ALERT); crossing the cap marks it
+// exceeded, and from then on the agents it covers can only act through a
+// human review — Kolumna can't stop a model it doesn't run, but it can stop
+// that model's changes landing unreviewed.
+model UsageBudget {
+  id          String    @id @default(cuid())
+  workspaceId String
+  sprintId    String?
+  agentId     String?
+  costCapUsd  Decimal?  @db.Decimal(14, 2)
+  tokenCap    Int?
+  alertAt     Float     @default(0.8)
+  alertedAt   DateTime?
+  exceededAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sprint    Sprint?   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
 }

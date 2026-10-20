@@ -174,7 +174,7 @@ describe("callTool enforcement pipeline", () => {
   });
 
   it("only advertises tools the grant's scopes allow", () => {
-    expect(describeTools(["card:read"]).map((t) => t.name)).toEqual(["list_my_tasks", "get_ticket"]);
+    expect(describeTools(["card:read"]).map((t) => t.name)).toEqual(["list_my_tasks", "get_ticket", "report_usage"]);
     const [propose] = describeTools(["card:write"]);
     expect(propose!.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
   });

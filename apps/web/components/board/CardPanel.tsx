@@ -252,6 +252,14 @@ export function CardPanel({
                 ]}
               />
 
+              <FieldLabel>Agent cost</FieldLabel>
+              <span className="text-[13px] text-muted" style={mono}>
+                {card.cost.events === 0
+                  ? "nothing reported"
+                  : `${card.cost.costUsd ? `$${card.cost.costUsd}` : "$?"} · ${card.cost.tokens.toLocaleString()} tokens`}
+                {card.cost.events > 0 && <span className="text-faint"> · {card.cost.events} reports</span>}
+              </span>
+
               <FieldLabel>Agent review</FieldLabel>
               <Select
                 compact
