@@ -132,9 +132,14 @@ export default function BacklogPage() {
   return (
     <main className="min-h-screen bg-bg">
       <div className="px-6 pt-10 pb-6 lg:px-10">
-        <Link href={`/b/${boardId}`} className="text-[13px] text-faint hover:text-fg" style={mono}>
-          ← board
-        </Link>
+        <div className="flex items-center gap-5">
+          <Link href={`/b/${boardId}`} className="text-[13px] text-faint hover:text-fg" style={mono}>
+            ← board
+          </Link>
+          <Link href={`/b/${boardId}/reports`} className="text-[13px] text-faint hover:text-fg" style={mono}>
+            sprint reports →
+          </Link>
+        </div>
         <h1
           className="mt-3 flex items-baseline gap-3 text-[clamp(1.6rem,3vw,2.4rem)] font-medium tracking-[-0.02em]"
           style={mono}
@@ -630,10 +635,11 @@ function StartDialog({
 }: {
   sprint: BacklogSprint;
   onClose: () => void;
-  onStart: (body: { goal?: string; endsAt: string }) => Promise<unknown>;
+  onStart: (body: { goal?: string; endsAt: string; humanCapacityHours?: number }) => Promise<unknown>;
 }) {
   const [goal, setGoal] = useState(sprint.goal ?? "");
   const [weeks, setWeeks] = useState("2");
+  const [hours, setHours] = useState("");
   return (
     <Dialog title={`Start ${sprint.name}`} onClose={onClose}>
       <p className="mb-4 text-[13px] text-muted">
@@ -650,12 +656,21 @@ function StartDialog({
         className="w-full bg-surface-2 px-3 py-2 text-[14px] text-fg shadow-[inset_0_0_0_1px_var(--color-line)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
         style={{ borderRadius: 8 }}
       />
+      <label className="mt-4 mb-1.5 block text-[13px] text-faint">Human capacity (hours, optional)</label>
+      <input
+        value={hours}
+        onChange={(e) => setHours(e.target.value.replace(/[^0-9.]/g, ""))}
+        placeholder="e.g. 60 — the people's side; agents have a budget"
+        className="w-full bg-surface-2 px-3 py-2 text-[14px] text-fg shadow-[inset_0_0_0_1px_var(--color-line)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
+        style={{ borderRadius: 8 }}
+      />
       <DialogActions
         onClose={onClose}
         label="Start sprint"
         onConfirm={() =>
           onStart({
             ...(goal.trim() ? { goal: goal.trim() } : {}),
+            ...(hours && Number(hours) >= 0 ? { humanCapacityHours: Number(hours) } : {}),
             endsAt: new Date(Date.now() + Number(weeks) * 7 * 86_400_000).toISOString(),
           })
         }

@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import type { TenantContext } from "../lib/tenant-context.js";
 import { allocateCardNumber } from "../lib/keys.js";
 import { AUDIT_TX_OPTIONS } from "../lib/audit.js";
+import { syncDone } from "../lib/completion.js";
 
 export async function listByListId(ctx: TenantContext, listId: string) {
   return prisma.card.findMany({
@@ -31,7 +32,7 @@ export async function createCard(
       sprintId === undefined
         ? await tx.sprint.findFirst({ where: { boardId: list.boardId, status: "ACTIVE" }, select: { id: true } })
         : null;
-    return tx.card.create({
+    const card = await tx.card.create({
       data: {
         title,
         rank,
@@ -42,6 +43,8 @@ export async function createCard(
         sprintId: sprintId === undefined ? (active?.id ?? null) : sprintId,
       },
     });
+    await syncDone(tx, card.id, { actorId: ctx.actorId }); // created straight into Done
+    return card;
   }, AUDIT_TX_OPTIONS); // concurrent creates queue on the board row lock
 }
 
@@ -126,8 +129,13 @@ export async function moveCard(
   });
   if (!targetList) return { count: 0 };
 
-  return prisma.card.updateMany({
-    where: { id: cardId, workspaceId: ctx.workspaceId },
-    data: { listId, rank },
-  });
+  // The move and its done/reopen bookkeeping (Phase 6) commit together.
+  return prisma.$transaction(async (tx) => {
+    const moved = await tx.card.updateMany({
+      where: { id: cardId, workspaceId: ctx.workspaceId },
+      data: { listId, rank },
+    });
+    if (moved.count) await syncDone(tx, cardId, { actorId: ctx.actorId });
+    return moved;
+  }, AUDIT_TX_OPTIONS);
 }

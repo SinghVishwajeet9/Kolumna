@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import { appendAuditEntry, AUDIT_TX_OPTIONS, type Tx } from "../lib/audit.js";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors.js";
+import { computeReliability } from "../lib/reliability.js";
 
 const router = Router();
 
@@ -182,6 +183,7 @@ router.patch("/sprints/:sprintId", requireAuth, async (req, res, next) => {
         name: z.string().trim().min(1).max(80).optional(),
         goal: z.string().max(500).nullable().optional(),
         endsAt: z.string().datetime().nullable().optional(),
+        humanCapacityHours: z.number().min(0).max(100_000).nullable().optional(), // Phase 6
       })
       .safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.message);
@@ -200,7 +202,11 @@ router.patch("/sprints/:sprintId", requireAuth, async (req, res, next) => {
 router.post("/sprints/:sprintId/start", requireAuth, async (req, res, next) => {
   try {
     const parsed = z
-      .object({ endsAt: z.string().datetime().optional(), goal: z.string().max(500).optional() })
+      .object({
+        endsAt: z.string().datetime().optional(),
+        goal: z.string().max(500).optional(),
+        humanCapacityHours: z.number().min(0).max(100_000).optional(), // Phase 6: the humans' side of capacity
+      })
       .safeParse(req.body ?? {});
     if (!parsed.success) throw new ValidationError(parsed.error.message);
     const sprint = await requireSprint(req.user!.actorId, req.params.sprintId!);
@@ -213,7 +219,13 @@ router.post("/sprints/:sprintId/start", requireAuth, async (req, res, next) => {
       const started = await prisma.$transaction(async (tx) => {
         const s = await tx.sprint.update({
           where: { id: sprint.id },
-          data: { status: "ACTIVE", startsAt, endsAt, ...(parsed.data.goal ? { goal: parsed.data.goal } : {}) },
+          data: {
+            status: "ACTIVE",
+            startsAt,
+            endsAt,
+            ...(parsed.data.goal ? { goal: parsed.data.goal } : {}),
+            ...(parsed.data.humanCapacityHours !== undefined ? { humanCapacityHours: parsed.data.humanCapacityHours } : {}),
+          },
         });
         await appendAuditEntry(tx, {
           workspaceId: sprint.workspaceId,
@@ -257,14 +269,42 @@ router.post("/sprints/:sprintId/complete", requireAuth, async (req, res, next) =
 
     const result = await prisma.$transaction(async (tx) => {
       const done = await doneListId(tx, sprint.boardId);
-      const moved = await tx.card.updateMany({
-        where: { sprintId: sprint.id, ...(done ? { listId: { not: done } } : {}) },
-        data: { sprintId: target },
-      });
+      const unfinished = { sprintId: sprint.id, ...(done ? { listId: { not: done } } : {}) };
+      // Phase 6: what was committed but not finished leaves the sprint now —
+      // remember how many points, so its burndown still adds up afterwards.
+      const carried = await tx.card.aggregate({ where: unfinished, _sum: { storyPoints: true } });
+      const moved = await tx.card.updateMany({ where: unfinished, data: { sprintId: target } });
+      const completedAt = new Date();
       const completed = await tx.sprint.update({
         where: { id: sprint.id },
-        data: { status: "COMPLETED", completedAt: new Date() },
+        data: { status: "COMPLETED", completedAt, carriedOverPoints: carried._sum.storyPoints ?? 0 },
       });
+      // Phase 6: each agent that worked this sprint gets a reliability
+      // snapshot — the trend that autonomy promotion is judged on.
+      const sprintCards = await tx.card.findMany({ where: { sprintId: sprint.id }, select: { doneAssigneeId: true } });
+      const [byDone, byReview, byCost] = await Promise.all([
+        tx.agent.findMany({
+          where: { workspaceId: sprint.workspaceId, actorId: { in: sprintCards.map((c) => c.doneAssigneeId).filter((x): x is string => !!x) } },
+          select: { id: true },
+        }),
+        tx.confidenceReview.findMany({ where: { card: { sprintId: sprint.id } }, select: { agentId: true }, distinct: ["agentId"] }),
+        tx.costEvent.findMany({ where: { sprintId: sprint.id, agentId: { not: null } }, select: { agentId: true }, distinct: ["agentId"] }),
+      ]);
+      const agentIds = new Set([...byDone.map((a) => a.id), ...byReview.map((r) => r.agentId), ...byCost.map((c) => c.agentId!)]);
+      for (const id of agentIds) {
+        const agent = await tx.agent.findUniqueOrThrow({ where: { id }, select: { id: true, actorId: true, workspaceId: true } });
+        const r = await computeReliability(tx, agent, {
+          sprintId: sprint.id,
+          from: sprint.startsAt ?? sprint.createdAt,
+          to: completedAt,
+        });
+        await tx.agentReliability.upsert({
+          where: { agentId_sprintId: { agentId: id, sprintId: sprint.id } },
+          create: { workspaceId: sprint.workspaceId, agentId: id, sprintId: sprint.id, ...r },
+          update: r,
+        });
+      }
+
       // G14: agents brought in for this sprint lose access with it — their
       // live grants die now, not at their natural expiry.
       const bound = await tx.agent.findMany({ where: { accessSprintId: sprint.id }, select: { id: true } });

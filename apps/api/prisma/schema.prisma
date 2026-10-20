@@ -62,27 +62,28 @@ model Session {
 }
 
 model Workspace {
-  id               String             @id @default(cuid())
-  name             String
-  slug             String             @unique
-  createdAt        DateTime           @default(now())
-  members          Membership[]
-  boards           Board[]
-  labels           Label[]
-  lists            List[]
-  cards            Card[]
-  agents           Agent[]
-  auditEntries     AuditEntry[]
-  subtaskProposals SubtaskProposal[]
-  reviews          ConfidenceReview[]
-  autonomyPolicies AutonomyPolicy[]
-  comments         Comment[]
-  checklistItems   ChecklistItem[]
-  epics            Epic[]
-  sprints          Sprint[]
-  costEvents       CostEvent[]
-  modelPrices      ModelPrice[]
-  usageBudgets     UsageBudget[]
+  id                 String             @id @default(cuid())
+  name               String
+  slug               String             @unique
+  createdAt          DateTime           @default(now())
+  members            Membership[]
+  boards             Board[]
+  labels             Label[]
+  lists              List[]
+  cards              Card[]
+  agents             Agent[]
+  auditEntries       AuditEntry[]
+  subtaskProposals   SubtaskProposal[]
+  reviews            ConfidenceReview[]
+  autonomyPolicies   AutonomyPolicy[]
+  comments           Comment[]
+  checklistItems     ChecklistItem[]
+  epics              Epic[]
+  sprints            Sprint[]
+  costEvents         CostEvent[]
+  modelPrices        ModelPrice[]
+  usageBudgets       UsageBudget[]
+  agentReliabilities AgentReliability[]
 }
 
 enum WorkspaceRole {
@@ -140,15 +141,16 @@ model Agent {
   autonomyLevel       AutonomyLevel @default(ACT_WITH_APPROVAL)
   confidenceThreshold Float         @default(0.8) // ACT_WITH_APPROVAL acts on its own only at or above this
 
-  actor            Actor              @relation(fields: [actorId], references: [id], onDelete: Cascade)
-  accessSprint     Sprint?            @relation(fields: [accessSprintId], references: [id], onDelete: SetNull)
-  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner            Actor              @relation("AgentOwner", fields: [ownerActorId], references: [id])
-  grants           AgentGrant[]
-  autonomyPolicies AutonomyPolicy[]
-  reviews          ConfidenceReview[]
-  costEvents       CostEvent[]
-  budgets          UsageBudget[]
+  actor              Actor              @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  accessSprint       Sprint?            @relation(fields: [accessSprintId], references: [id], onDelete: SetNull)
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner              Actor              @relation("AgentOwner", fields: [ownerActorId], references: [id])
+  grants             AgentGrant[]
+  autonomyPolicies   AutonomyPolicy[]
+  reviews            ConfidenceReview[]
+  costEvents         CostEvent[]
+  budgets            UsageBudget[]
+  agentReliabilities AgentReliability[]
 
   @@index([workspaceId])
 }
@@ -446,6 +448,11 @@ model Card {
   priority         Priority           @default(NONE)
   storyPoints      Int?
   reviewThreshold  Float? // Phase 4: agent changes below this confidence need a human, whatever its autonomy
+  // Phase 6 — when the card last reached the board's done column, and whose
+  // work it was (the assignee at that moment). Drives burndown and agent
+  // reliability; cleared when the card leaves done (a reopen, audited).
+  doneAt           DateTime?
+  doneAssigneeId   String?
   epicId           String?
   sprintId         String? // null = in the backlog
   createdAt        DateTime           @default(now())
@@ -500,22 +507,28 @@ enum SprintStatus {
 // At most ONE active sprint per board — enforced by a partial unique index
 // added by hand in the migration (Prisma can't express WHERE in @@unique).
 model Sprint {
-  id           String        @id @default(cuid())
-  workspaceId  String
-  boardId      String
-  name         String
-  goal         String?
-  status       SprintStatus  @default(PLANNED)
-  startsAt     DateTime?
-  endsAt       DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime      @default(now())
-  cards        Card[]
-  boundAgents  Agent[] // agents whose access ends when this sprint is completed (G14)
-  board        Board         @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  costEvents   CostEvent[]
-  usageBudgets UsageBudget[]
+  id                 String             @id @default(cuid())
+  workspaceId        String
+  boardId            String
+  name               String
+  goal               String?
+  status             SprintStatus       @default(PLANNED)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  completedAt        DateTime?
+  // Phase 6 — blended capacity: the humans' hours for this sprint; the
+  // agents' side is its UsageBudget. carriedOverPoints is snapshotted at
+  // completion (unfinished cards leave the sprint then).
+  humanCapacityHours Float?
+  carriedOverPoints  Int?
+  createdAt          DateTime           @default(now())
+  cards              Card[]
+  boundAgents        Agent[] // agents whose access ends when this sprint is completed (G14)
+  board              Board              @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  costEvents         CostEvent[]
+  usageBudgets       UsageBudget[]
+  agentReliabilities AgentReliability[]
 
   @@index([boardId])
   @@index([workspaceId])
@@ -602,5 +615,34 @@ model UsageBudget {
   sprint    Sprint?   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
   agent     Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
+}
+
+// Phase 6 — an agent's track record for one completed sprint. Snapshotted at
+// completion so the trend survives later edits; the live 30-day view is
+// computed on demand. It informs autonomy promotion — a human still decides.
+model AgentReliability {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  agentId         String
+  sprintId        String
+  cardsDone       Int
+  pointsDone      Int
+  reopened        Int // its done cards that were later reopened
+  reviewsDecided  Int
+  reviewsApproved Int
+  approvalRate    Float? // null when nothing was decided
+  reopenRate      Float? // null when it finished nothing
+  avgConfidence   Float? // what it claimed on reviewed changes
+  deniedCalls     Int
+  toolCalls       Int
+  costUsd         Decimal? @db.Decimal(14, 6)
+  createdAt       DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sprint    Sprint    @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, sprintId])
   @@index([workspaceId])
 }

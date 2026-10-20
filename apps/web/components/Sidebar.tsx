@@ -8,6 +8,7 @@ import {
   Robot,
   Pulse,
   ListChecks,
+  ChartLine,
   SealCheck,
   CurrencyDollar,
   SidebarSimple,
@@ -305,6 +306,13 @@ export function Sidebar() {
               label="Backlog & sprints"
               icon={ListChecks}
               active={pathname === `/b/${planningBoard.id}/backlog`}
+              collapsed={collapsed}
+            />
+            <NavItem
+              href={`/b/${planningBoard.id}/reports`}
+              label="Sprint reports"
+              icon={ChartLine}
+              active={pathname === `/b/${planningBoard.id}/reports`}
               collapsed={collapsed}
             />
           </>

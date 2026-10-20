@@ -304,6 +304,14 @@ export default function AgentsPage() {
                   />
                 )}
 
+                {a.status !== "REVOKED" && workspace && (
+                  <TrackRecord
+                    workspaceId={workspace.id}
+                    agent={a}
+                    onApply={(level) => act(() => api.patch(path(a, "autonomy"), { level }))}
+                  />
+                )}
+
                 {a.status !== "REVOKED" && (
                   <AccessRow
                     agent={a}
@@ -573,6 +581,97 @@ function AutonomyRow({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+type Reliability = {
+  level: Level;
+  last30: {
+    cardsDone: number;
+    pointsDone: number;
+    reopened: number;
+    reviewsDecided: number;
+    approvalRate: number | null;
+    reopenRate: number | null;
+    avgConfidence: number | null;
+    deniedCalls: number;
+    toolCalls: number;
+    costUsd: string | null;
+  };
+  suggestion: { kind: "PROMOTE" | "DEMOTE" | "NONE"; to?: Level; because: string };
+  trend: { sprint: string; approvalRate: number | null; reopenRate: number | null; pointsDone: number }[];
+};
+
+// Phase 6: what the agent's record says about its autonomy. Kolumna only
+// suggests — the button is a human granting (or withdrawing) trust.
+function TrackRecord({ workspaceId, agent, onApply }: { workspaceId: string; agent: Agent; onApply: (level: Level) => Promise<void> }) {
+  const [rel, setRel] = useState<Reliability | null>(null);
+  useEffect(() => {
+    api.get<Reliability>(`/workspaces/${workspaceId}/agents/${agent.id}/reliability`).then(setRel, () => {});
+  }, [workspaceId, agent.id, agent.autonomyLevel]);
+  if (!rel) return null;
+  const r = rel.last30;
+  const pct = (n: number | null) => (n === null ? "—" : `${Math.round(n * 100)}%`);
+  const s = rel.suggestion;
+  const label = (l?: Level) => LEVELS.find((x) => x.value === l)?.label ?? "";
+  return (
+    <div className="mt-5 border-t border-line pt-4 text-[13px]">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="text-faint">Last 30 days</span>
+        <span className="text-muted" style={mono}>
+          {r.cardsDone} done · {r.pointsDone} pts
+        </span>
+        <span className="text-muted" style={mono} title="Of its changes and plans a human decided on">
+          approved {pct(r.approvalRate)} <span className="text-faint">of {r.reviewsDecided}</span>
+        </span>
+        <span className="text-muted" style={mono} title="Cards it finished that were reopened">
+          reopened {pct(r.reopenRate)}
+        </span>
+        {r.avgConfidence !== null && (
+          <span className="text-muted" style={mono} title="What it claimed on reviewed changes">
+            says {pct(r.avgConfidence)} sure
+          </span>
+        )}
+        {r.deniedCalls > 0 && (
+          <span className="text-[#fdba74]" style={mono}>
+            {r.deniedCalls} denied
+          </span>
+        )}
+        {r.costUsd && <span className="text-muted" style={mono}>${Number(r.costUsd).toFixed(2)}</span>}
+      </div>
+      {rel.trend.length > 0 && (
+        <p className="mt-1.5 text-[12px] text-faint" style={mono}>
+          by sprint:{" "}
+          {rel.trend.map((t) => `${t.sprint} ${pct(t.approvalRate)} approved, ${t.pointsDone} pts`).join(" · ")}
+        </p>
+      )}
+      <div
+        className="mt-3 flex flex-wrap items-center gap-3 px-3 py-2"
+        style={{
+          borderRadius: 8,
+          backgroundColor: s.kind === "PROMOTE" ? "rgba(90,247,179,0.08)" : s.kind === "DEMOTE" ? "rgba(253,186,116,0.08)" : "rgba(255,255,255,0.03)",
+        }}
+      >
+        <span className={s.kind === "PROMOTE" ? "text-accent" : s.kind === "DEMOTE" ? "text-[#fdba74]" : "text-faint"}>
+          {s.kind === "PROMOTE"
+            ? `Suggest promoting to ${label(s.to)}`
+            : s.kind === "DEMOTE"
+              ? `Suggest moving down to ${label(s.to)}`
+              : "No change suggested"}
+          <span className="text-faint"> — {s.because}</span>
+        </span>
+        {s.kind !== "NONE" && s.to && (
+          <button
+            type="button"
+            onClick={() => void onApply(s.to!)}
+            className="ml-auto bg-white/[0.08] px-3 py-1 text-[12px] text-fg hover:bg-white/[0.14]"
+            style={{ borderRadius: 7, ...mono }}
+          >
+            {s.kind === "PROMOTE" ? "Promote" : "Move down"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

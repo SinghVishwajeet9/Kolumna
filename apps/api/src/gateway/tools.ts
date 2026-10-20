@@ -22,6 +22,7 @@ import {
 import { parseScopes, type Scope } from "./scopes.js";
 import { decideAutonomy } from "./autonomy.js";
 import { exhaustedBudget, recordCost } from "../lib/cost.js";
+import { syncDone } from "../lib/completion.js";
 import { allocateCardNumber } from "../lib/keys.js";
 
 // What the CALLER supplies. Deliberately not workspaceId/actorId/scopes —
@@ -457,6 +458,7 @@ export const moveTicketTool = defineTool({
     }
     const rank = await nextCardRank(ctx.tx, ctx.workspaceId, target.id);
     await ctx.tx.card.update({ where: { id: card.id }, data: { listId: target.id, rank } });
+    await syncDone(ctx.tx, card.id, { actorId: ctx.actorId, onBehalfOfActorId: ctx.onBehalfOfActorId });
     return {
       output: { cardId: card.id, column: target.title, moved: true },
       audit: {
@@ -854,6 +856,7 @@ export const createTaskTool = defineTool({
         rank: await nextCardRank(ctx.tx, ctx.workspaceId, list.id),
       },
     });
+    await syncDone(ctx.tx, card.id, { actorId: ctx.actorId, onBehalfOfActorId: ctx.onBehalfOfActorId });
     return {
       output: {
         cardId: card.id,

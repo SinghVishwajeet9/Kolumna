@@ -15,7 +15,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { Plus, Lightning, ListChecks } from "@phosphor-icons/react";
+import { Plus, Lightning, ListChecks, ChartLine } from "@phosphor-icons/react";
 import { PageLoader } from "@/components/ui/Loader";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -197,6 +197,13 @@ export default function BoardPage() {
               style={mono}
             >
               <ListChecks size={15} /> backlog
+            </Link>
+            <Link
+              href={`/b/${boardId}/reports`}
+              className="flex items-center gap-1.5 text-[13px] text-faint transition-colors hover:text-fg"
+              style={mono}
+            >
+              <ChartLine size={15} /> reports
             </Link>
             <span className="flex items-center gap-2 text-[12px] text-faint" style={mono}>
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
