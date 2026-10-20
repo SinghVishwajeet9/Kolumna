@@ -8,6 +8,7 @@ import {
   Robot,
   Pulse,
   ListChecks,
+  SealCheck,
   SidebarSimple,
   SignOut,
   type Icon,
@@ -17,6 +18,12 @@ import { useAuth } from "@/lib/auth-context";
 
 const mono = { fontFamily: "var(--font-mono)" };
 const COLLAPSE_KEY = "kolumna:sidebar-collapsed";
+const SIDEBAR_REFRESH = "kolumna:refresh-sidebar";
+
+/** Ask the sidebar to refetch its counts (boards, agents, approvals). */
+export function refreshSidebar() {
+  window.dispatchEvent(new Event(SIDEBAR_REFRESH));
+}
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 const PILL_TRANSITION = `transform 320ms ${EASE}, height 320ms ${EASE}, opacity 150ms`;
 
@@ -104,6 +111,15 @@ export function Sidebar() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeAgents, setActiveAgents] = useState(0);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  // Bumped by refreshSidebar() (e.g. after an approval) so counts update
+  // without waiting for the next navigation.
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setRefreshTick((t) => t + 1);
+    window.addEventListener(SIDEBAR_REFRESH, bump);
+    return () => window.removeEventListener(SIDEBAR_REFRESH, bump);
+  }, []);
 
   // Restore the collapsed preference. Browser storage can be unavailable
   // (private mode, blocked site data), so it's best-effort only.
@@ -134,20 +150,23 @@ export function Sidebar() {
       .then(async (ws) => {
         const first = ws[0];
         if (!first || cancelled) return;
-        const [b, a] = await Promise.all([
+        const [b, a, r, p] = await Promise.all([
           api.get<Board[]>(`/workspaces/${first.id}/boards`),
           api.get<Agent[]>(`/workspaces/${first.id}/agents`),
+          api.get<unknown[]>(`/workspaces/${first.id}/reviews?status=PENDING`),
+          api.get<unknown[]>(`/workspaces/${first.id}/proposals?status=PENDING`),
         ]);
         if (cancelled) return;
         setWorkspace(first);
         setBoards(b);
         setActiveAgents(a.filter((x) => x.status === "ACTIVE").length);
+        setPendingApprovals(r.length + p.length);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [user, pathname]);
+  }, [user, pathname, refreshTick]);
 
   // Slide the pill to whichever link is aria-current. Writes straight to the
   // element's style — no React state, so moving it never re-renders the
@@ -236,6 +255,14 @@ export function Sidebar() {
         />
         <NavItem href="/boards" label="Boards" icon={Kanban} active={pathname === "/boards"} collapsed={collapsed} count={boards.length} />
         <NavItem href="/agents" label="Agents" icon={Robot} active={pathname.startsWith("/agents")} collapsed={collapsed} count={activeAgents} />
+        <NavItem
+          href="/approvals"
+          label="Approvals"
+          icon={SealCheck}
+          active={pathname.startsWith("/approvals")}
+          collapsed={collapsed}
+          count={pendingApprovals}
+        />
         <NavItem href="/activity" label="Activity" icon={Pulse} active={pathname.startsWith("/activity")} collapsed={collapsed} />
 
         {boards.length > 0 && (

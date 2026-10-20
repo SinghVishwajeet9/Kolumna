@@ -72,6 +72,7 @@ beforeAll(async () => {
         modelProvider: "anthropic",
         capabilities: {},
         allowedScopes: ["board:read", "card:read", "card:write", "card:create"],
+        autonomyLevel: "ACT_AUTONOMOUS",
         status: "ACTIVE",
         clientId: `sa_${tag}`,
         hashedClientSecret: "x",

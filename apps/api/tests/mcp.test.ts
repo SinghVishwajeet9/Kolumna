@@ -71,6 +71,7 @@ beforeAll(async () => {
     displayName: "Claude Code",
     modelProvider: "anthropic",
     allowedScopes: ["board:read", "card:read", "card:write"],
+    autonomyLevel: "ACT_AUTONOMOUS", // the Phase 4 gate has its own suite (autonomy.test.ts)
   });
   agent = {
     id: reg.body.agent.id,
@@ -169,7 +170,7 @@ describe("MCP endpoint", () => {
     expect((await verifyChain(workspaceId)).valid).toBe(true);
 
     await client.close();
-  });
+  }, 120_000); // ~20 sequential calls at ~250ms per DB round trip (roadmap G19)
 
   it("returns tool errors as results the agent can read, and audits them", async () => {
     const client = await connectAgent();

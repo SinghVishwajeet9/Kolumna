@@ -97,6 +97,22 @@ export type CardDetails = {
   board: { key: string };
   epic: EpicRef | null;
   sprint: SprintSummary | null;
+  reviewThreshold: number | null;
+  reviews: {
+    id: string;
+    toolName: string;
+    summary: string;
+    confidence: number | null;
+    reasoning: string | null;
+    reason: "AUTONOMY_LEVEL" | "LOW_CONFIDENCE";
+    status: "PENDING" | "APPROVED" | "REJECTED" | "FAILED";
+    note: string | null;
+    error: string | null;
+    createdAt: string;
+    decidedAt: string | null;
+    agentId: string;
+    agent: { actor: { displayName: string } };
+  }[];
   list: { id: string; title: string; boardId: string };
   assignee: ActorRef | null;
   checklistItems: ChecklistItem[];

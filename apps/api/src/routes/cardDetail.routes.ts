@@ -37,6 +37,13 @@ router.get("/cards/:cardId/details", requireAuth, async (req, res, next) => {
             include: { author: { select: { id: true, displayName: true, type: true } } },
           },
           subtaskProposals: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" } },
+          // Phase 4: gated agent changes waiting on this card, and recent decisions.
+          reviews: {
+            where: { OR: [{ status: "PENDING" }, { decidedAt: { gt: new Date(Date.now() - 7 * 86_400_000) } }] },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            include: { agent: { select: { actor: { select: { displayName: true } } } } },
+          },
         },
       }),
       getLineageForTarget(workspaceId, "Card", id),

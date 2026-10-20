@@ -29,6 +29,9 @@ const updateCardSchema = z.object({
   // null = no epic / back to the backlog. Both must be on the card's board.
   epicId: z.string().nullable().optional(),
   sprintId: z.string().nullable().optional(),
+  // Phase 4: agent changes to this card below this confidence wait for a
+  // human, whatever the agent's autonomy. null = no card-level bar.
+  reviewThreshold: z.number().min(0).max(1).nullable().optional(),
 });
 const moveCardSchema = z.object({
   listId: z.string(),

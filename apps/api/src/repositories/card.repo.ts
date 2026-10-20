@@ -63,6 +63,7 @@ export async function updateCard(
     storyPoints?: number | null;
     epicId?: string | null;
     sprintId?: string | null;
+    reviewThreshold?: number | null;
   },
 ) {
   return prisma.card.updateMany({

@@ -31,6 +31,7 @@ async function makeAgent(opts: { allowedScopes: string[]; status?: "ACTIVE" | "S
       modelProvider: "anthropic",
       capabilities: {},
       allowedScopes: opts.allowedScopes,
+      autonomyLevel: "ACT_AUTONOMOUS", // these tests are about the pipeline before Phase 4's gate
       status: opts.status ?? "ACTIVE",
       clientId: `test_${runTag}_${Math.random().toString(36).slice(2)}`,
       hashedClientSecret: "x",

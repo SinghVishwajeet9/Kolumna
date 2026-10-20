@@ -62,10 +62,10 @@ model Session {
 }
 
 model Workspace {
-  id               String            @id @default(cuid())
+  id               String             @id @default(cuid())
   name             String
-  slug             String            @unique
-  createdAt        DateTime          @default(now())
+  slug             String             @unique
+  createdAt        DateTime           @default(now())
   members          Membership[]
   boards           Board[]
   labels           Label[]
@@ -74,6 +74,8 @@ model Workspace {
   agents           Agent[]
   auditEntries     AuditEntry[]
   subtaskProposals SubtaskProposal[]
+  reviews          ConfidenceReview[]
+  autonomyPolicies AutonomyPolicy[]
   comments         Comment[]
   checklistItems   ChecklistItem[]
   epics            Epic[]
@@ -113,31 +115,106 @@ enum AgentStatus {
 // credentials (clientId + clientSecret) instead. See
 // kolumna-architecture.md §4.1 and §6.
 model Agent {
-  id                 String      @id @default(cuid())
-  actorId            String      @unique
-  workspaceId        String
-  ownerActorId       String // which human registered/owns this agent
-  modelProvider      String // BYO — "anthropic" | "openai" | ... (no adapter yet, just recorded)
-  capabilities       Json // skills/tools this agent offers, free-form for now
-  allowedScopes      Json        @default("[]") // ceiling set by the registering human; every grant must be a subset
-  status             AgentStatus @default(PROVISIONED)
-  clientId           String      @unique
-  hashedClientSecret String
-  createdAt          DateTime    @default(now())
+  id                  String        @id @default(cuid())
+  actorId             String        @unique
+  workspaceId         String
+  ownerActorId        String // which human registered/owns this agent
+  modelProvider       String // BYO — "anthropic" | "openai" | ... (no adapter yet, just recorded)
+  capabilities        Json // skills/tools this agent offers, free-form for now
+  allowedScopes       Json          @default("[]") // ceiling set by the registering human; every grant must be a subset
+  status              AgentStatus   @default(PROVISIONED)
+  clientId            String        @unique
+  hashedClientSecret  String
+  createdAt           DateTime      @default(now())
   // G14 — an engagement end, so an agent brought in for a sprint doesn't keep
   // its credential forever. Access ends at accessUntil, or when accessSprint
   // is completed, whichever comes first. Enforced at grant issuance
   // (agentGrant.repo.ts); completing the sprint revokes its live grants.
-  accessUntil        DateTime?
-  accessSprintId     String?
+  accessUntil         DateTime?
+  accessSprintId      String?
+  // Phase 4 — graduated trust. The default for every board; AutonomyPolicy
+  // overrides it per board. New agents start ACT_WITH_APPROVAL.
+  autonomyLevel       AutonomyLevel @default(ACT_WITH_APPROVAL)
+  confidenceThreshold Float         @default(0.8) // ACT_WITH_APPROVAL acts on its own only at or above this
 
-  actor        Actor        @relation(fields: [actorId], references: [id], onDelete: Cascade)
-  accessSprint Sprint?      @relation(fields: [accessSprintId], references: [id], onDelete: SetNull)
-  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner        Actor        @relation("AgentOwner", fields: [ownerActorId], references: [id])
-  grants       AgentGrant[]
+  actor            Actor              @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  accessSprint     Sprint?            @relation(fields: [accessSprintId], references: [id], onDelete: SetNull)
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner            Actor              @relation("AgentOwner", fields: [ownerActorId], references: [id])
+  grants           AgentGrant[]
+  autonomyPolicies AutonomyPolicy[]
+  reviews          ConfidenceReview[]
 
   @@index([workspaceId])
+}
+
+enum AutonomyLevel {
+  SUGGEST_ONLY // every gated write waits for a human
+  ACT_WITH_APPROVAL // acts when its stated confidence clears the threshold, else waits
+  ACT_AUTONOMOUS // acts directly, still fully audited
+}
+
+// Per-board override of an agent's autonomy ("trusted on the docs board,
+// supervised on payments").
+model AutonomyPolicy {
+  id                  String        @id @default(cuid())
+  workspaceId         String
+  agentId             String
+  boardId             String
+  level               AutonomyLevel
+  confidenceThreshold Float? // null = the agent's own
+  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime      @default(now())
+
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  board     Board     @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, boardId])
+  @@index([workspaceId])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED // and it ran
+  REJECTED
+  FAILED // approved, but it could no longer run (e.g. the card was reassigned)
+}
+
+enum ReviewReason {
+  AUTONOMY_LEVEL // the agent may only suggest here
+  LOW_CONFIDENCE // below the threshold, or no confidence given
+}
+
+// A gated agent action waiting for a human. Holds the exact tool call; on
+// approval it runs as the agent, on the approver's authority.
+model ConfidenceReview {
+  id                String       @id @default(cuid())
+  workspaceId       String
+  agentId           String
+  boardId           String
+  cardId            String?
+  toolName          String
+  input             Json // validated tool input, minus confidence/reasoning
+  summary           String // what a human is approving, in words
+  confidence        Float?
+  reasoning         String?
+  reason            ReviewReason
+  status            ReviewStatus @default(PENDING)
+  onBehalfOfActorId String? // whose authority the agent was acting under when it asked
+  reviewerActorId   String?
+  decidedAt         DateTime?
+  note              String? // reviewer's note on rejection
+  result            Json? // the tool's output, once approved
+  error             String? // why it FAILED
+  createdAt         DateTime     @default(now())
+
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  card      Card?     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@index([agentId, status])
 }
 
 // One issued access token. Same "never store the raw secret" pattern as
@@ -304,20 +381,21 @@ model CardLabel {
 }
 
 model Board {
-  id             String    @id @default(cuid())
-  workspaceId    String
-  title          String
+  id               String           @id @default(cuid())
+  workspaceId      String
+  title            String
   // Prefix for card keys (PRM-1, PRM-2…), unique within the workspace.
-  key            String
+  key              String
   // Atomic per-board counter for card numbers — incremented in the same
   // statement that hands the number out, so concurrent creates never collide.
-  nextCardNumber Int       @default(1)
-  createdAt      DateTime  @default(now())
-  lists          List[]
-  cards          Card[]
-  sprints        Sprint[]
-  epics          Epic[]
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nextCardNumber   Int              @default(1)
+  createdAt        DateTime         @default(now())
+  lists            List[]
+  cards            Card[]
+  sprints          Sprint[]
+  epics            Epic[]
+  autonomyPolicies AutonomyPolicy[]
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, key])
   @@unique([id, workspaceId]) // target of composite foreign keys below
@@ -350,7 +428,7 @@ enum Priority {
 }
 
 model Card {
-  id               String            @id @default(cuid())
+  id               String             @id @default(cuid())
   listId           String
   boardId          String
   workspaceId      String
@@ -359,23 +437,25 @@ model Card {
   rank             Float
   description      String?
   dueDate          DateTime?
-  priority         Priority          @default(NONE)
+  priority         Priority           @default(NONE)
   storyPoints      Int?
+  reviewThreshold  Float? // Phase 4: agent changes below this confidence need a human, whatever its autonomy
   epicId           String?
   sprintId         String? // null = in the backlog
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime           @default(now())
   cardLabels       CardLabel[]
   assigneeId       String?
-  assignee         Actor?            @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee         Actor?             @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
   // Composite FKs — the DATABASE guarantees a card's list is on the card's own
   // board, in the card's own workspace. The app-level check from the
   // 2026-10-13 cross-tenant move bug is now a backstop, not the only line.
-  list             List              @relation(fields: [listId, boardId, workspaceId], references: [id, boardId, workspaceId], onDelete: Cascade)
-  board            Board             @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  epic             Epic?             @relation(fields: [epicId], references: [id], onDelete: SetNull)
-  sprint           Sprint?           @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  list             List               @relation(fields: [listId, boardId, workspaceId], references: [id, boardId, workspaceId], onDelete: Cascade)
+  board            Board              @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  epic             Epic?              @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  sprint           Sprint?            @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   subtaskProposals SubtaskProposal[]
+  reviews          ConfidenceReview[]
   comments         Comment[]
   checklistItems   ChecklistItem[]
 

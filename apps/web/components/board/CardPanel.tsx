@@ -7,6 +7,18 @@ import { Select } from "@/components/ui/Select";
 import type { CardDetails, Epic, Member, SprintSummary } from "./types";
 import { PRIORITIES } from "./types";
 import { PRIORITY_META, PriorityIcon } from "./Planning";
+import { ReviewItem } from "@/components/approvals/ReviewItem";
+import { refreshSidebar } from "@/components/Sidebar";
+
+// Phase 4: below this stated confidence, agent changes to the card wait for
+// a human — whatever the agent's autonomy level.
+const REVIEW_THRESHOLDS = [
+  { value: null, label: "Agent's own setting" },
+  { value: "0.5", label: "Below 50% confidence" },
+  { value: "0.7", label: "Below 70% confidence" },
+  { value: "0.9", label: "Below 90% confidence" },
+  { value: "1", label: "Always (every agent change)" },
+];
 import { ActorBadge } from "./ActorBadge";
 import { ProgressBar } from "./ProgressBar";
 import { AssigneeSelect } from "./AssigneeSelect";
@@ -124,6 +136,7 @@ export function CardPanel({
     }
     await load();
     onChanged();
+    refreshSidebar(); // approvals and counts may have changed
   }
 
   const patch = (data: Record<string, unknown>) => act(() => api.patch(`/cards/${cardId}`, data));
@@ -239,6 +252,18 @@ export function CardPanel({
                 ]}
               />
 
+              <FieldLabel>Agent review</FieldLabel>
+              <Select
+                compact
+                value={card.reviewThreshold === null ? null : String(card.reviewThreshold)}
+                onChange={(v) => patch({ reviewThreshold: v === null ? null : Number(v) })}
+                options={
+                  card.reviewThreshold !== null && !REVIEW_THRESHOLDS.some((t) => t.value === String(card.reviewThreshold))
+                    ? [...REVIEW_THRESHOLDS, { value: String(card.reviewThreshold), label: `Below ${Math.round(card.reviewThreshold * 100)}%` }]
+                    : REVIEW_THRESHOLDS
+                }
+              />
+
               <FieldLabel>Sprint</FieldLabel>
               <Select
                 compact
@@ -275,6 +300,25 @@ export function CardPanel({
                 style={{ borderRadius: 8 }}
               />
             </section>
+
+            {card.reviews.some((r) => r.status === "PENDING") && (
+              <section>
+                <SectionTitle>Agent changes awaiting approval</SectionTitle>
+                <ul className="flex flex-col gap-3">
+                  {card.reviews
+                    .filter((r) => r.status === "PENDING")
+                    .map((r) => (
+                      <ReviewItem
+                        key={r.id}
+                        compact
+                        review={{ ...r, agent: { id: r.agentId, displayName: r.agent.actor.displayName }, card: null }}
+                        onApprove={() => act(() => api.post(`/reviews/${r.id}/approve`))}
+                        onReject={(note) => act(() => api.post(`/reviews/${r.id}/reject`, note ? { note } : {}))}
+                      />
+                    ))}
+                </ul>
+              </section>
+            )}
 
             {card.subtaskProposals.length > 0 && (
               <section>

@@ -20,6 +20,7 @@ export async function createAgent(
     modelProvider: string;
     capabilities: unknown;
     allowedScopes: Scope[];
+    autonomyLevel?: "SUGGEST_ONLY" | "ACT_WITH_APPROVAL" | "ACT_AUTONOMOUS";
   },
 ) {
   const clientId = generateClientId();
@@ -38,6 +39,7 @@ export async function createAgent(
         modelProvider: params.modelProvider,
         capabilities: params.capabilities as object,
         allowedScopes: params.allowedScopes,
+        ...(params.autonomyLevel ? { autonomyLevel: params.autonomyLevel } : {}),
         clientId,
         hashedClientSecret,
       },
@@ -54,7 +56,7 @@ export async function createAgent(
       targetType: "Agent",
       targetId: agent.id,
       result: "SUCCESS",
-      resource: JSON.stringify({ allowedScopes: params.allowedScopes }),
+      resource: JSON.stringify({ allowedScopes: params.allowedScopes, autonomyLevel: agent.autonomyLevel }),
     });
     return agent;
   }, AUDIT_TX_OPTIONS);
@@ -66,7 +68,11 @@ export async function createAgent(
 export async function listAgents(ctx: TenantContext) {
   return prisma.agent.findMany({
     where: { workspaceId: ctx.workspaceId },
-    include: { actor: true, accessSprint: { select: { id: true, name: true, status: true, completedAt: true } } },
+    include: {
+      actor: true,
+      accessSprint: { select: { id: true, name: true, status: true, completedAt: true } },
+      autonomyPolicies: true,
+    },
     orderBy: { createdAt: "asc" },
   });
 }

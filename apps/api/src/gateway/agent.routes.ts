@@ -1,13 +1,14 @@
 // Human-facing agent lifecycle: register / list / activate / suspend /
 // revoke. All require a logged-in human who's a member of the workspace —
 // same requireAuth + requireWorkspaceMember pattern as boards/lists/cards.
-// Managing agents isn't restricted to OWNER/ADMIN yet — any member can
-// register/manage one; role-scoping this is deferred, see PHASE_1.md.
+// Listing is open to every member; every change (register, activate,
+// suspend, revoke, rotate, access, autonomy) is OWNER/ADMIN only (G11).
 
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
+import { requireWorkspaceAdmin } from "../middleware/requireWorkspaceAdmin.js";
 import * as agentRepo from "./agent.repo.js";
 import { accessEnd, revokeAllGrantsForAgent } from "./agentGrant.repo.js";
 import { appendAuditEntry, writeAuditEntry, AUDIT_TX_OPTIONS } from "../lib/audit.js";
@@ -25,12 +26,15 @@ const registerSchema = z.object({
   // The ceiling. The registering human decides what this agent may EVER be
   // granted; the agent can't widen it at token time.
   allowedScopes: scopeListSchema,
+  // Phase 4: how much it may do without a human. Defaults to the cautious
+  // middle (ACT_WITH_APPROVAL) — trust is earned, then granted.
+  autonomyLevel: z.enum(["SUGGEST_ONLY", "ACT_WITH_APPROVAL", "ACT_AUTONOMOUS"]).optional(),
 });
 
 router.post(
   "/workspaces/:workspaceId/agents",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
@@ -48,6 +52,7 @@ router.post(
           status: agent.status,
           modelProvider: agent.modelProvider,
           allowedScopes: agent.allowedScopes,
+          autonomyLevel: agent.autonomyLevel,
         },
         clientId,
         clientSecret,
@@ -95,6 +100,13 @@ router.get(
           assignedCards: cardCounts.find((c) => c.assigneeId === a.actorId)?._count._all ?? 0,
           accessUntil: a.accessUntil,
           accessSprint: a.accessSprint ? { id: a.accessSprint.id, name: a.accessSprint.name, status: a.accessSprint.status } : null,
+          autonomyLevel: a.autonomyLevel,
+          confidenceThreshold: a.confidenceThreshold,
+          boardPolicies: a.autonomyPolicies.map((p) => ({
+            boardId: p.boardId,
+            level: p.level,
+            confidenceThreshold: p.confidenceThreshold,
+          })),
           accessEnded: (() => {
             const end = accessEnd(a);
             return end !== null && end.at.getTime() <= Date.now();
@@ -112,7 +124,7 @@ router.get(
 router.patch(
   "/workspaces/:workspaceId/agents/:agentId/activate",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
@@ -140,7 +152,7 @@ router.patch(
 router.patch(
   "/workspaces/:workspaceId/agents/:agentId/suspend",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
@@ -171,7 +183,7 @@ router.patch(
 router.patch(
   "/workspaces/:workspaceId/agents/:agentId/revoke",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
@@ -196,6 +208,104 @@ router.patch(
   },
 );
 
+// Phase 4 — how much this agent may do without a human. The default level
+// applies on every board; per-board policies override it.
+const levelSchema = z.enum(["SUGGEST_ONLY", "ACT_WITH_APPROVAL", "ACT_AUTONOMOUS"]);
+const thresholdSchema = z.number().min(0).max(1);
+
+router.patch(
+  "/workspaces/:workspaceId/agents/:agentId/autonomy",
+  requireAuth,
+  requireWorkspaceAdmin,
+  async (req, res, next) => {
+    try {
+      const parsed = z
+        .object({ level: levelSchema.optional(), confidenceThreshold: thresholdSchema.optional() })
+        .safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.message);
+      const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
+      if (!agent) throw new NotFoundError("Agent not found");
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const a = await tx.agent.update({
+          where: { id: agent.id },
+          data: {
+            ...(parsed.data.level ? { autonomyLevel: parsed.data.level } : {}),
+            ...(parsed.data.confidenceThreshold !== undefined
+              ? { confidenceThreshold: parsed.data.confidenceThreshold }
+              : {}),
+          },
+        });
+        await appendAuditEntry(tx, {
+          workspaceId: req.ctx!.workspaceId,
+          actorId: req.ctx!.actorId,
+          action: "AGENT.SET_AUTONOMY",
+          targetType: "Agent",
+          targetId: agent.id,
+          result: "SUCCESS",
+          resource: `default: ${agent.autonomyLevel} -> ${a.autonomyLevel}, threshold ${agent.confidenceThreshold} -> ${a.confidenceThreshold}`,
+        });
+        return a;
+      }, AUDIT_TX_OPTIONS);
+      res.json({ id: updated.id, autonomyLevel: updated.autonomyLevel, confidenceThreshold: updated.confidenceThreshold });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// level: null removes the board's override (back to the agent's default).
+router.put(
+  "/workspaces/:workspaceId/agents/:agentId/autonomy/boards/:boardId",
+  requireAuth,
+  requireWorkspaceAdmin,
+  async (req, res, next) => {
+    try {
+      const parsed = z
+        .object({ level: levelSchema.nullable(), confidenceThreshold: thresholdSchema.nullable().optional() })
+        .safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.message);
+      const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);
+      if (!agent) throw new NotFoundError("Agent not found");
+      const board = await prisma.board.findFirst({
+        where: { id: req.params.boardId!, workspaceId: req.ctx!.workspaceId },
+      });
+      if (!board) throw new NotFoundError("Board not found");
+
+      const { level, confidenceThreshold } = parsed.data;
+      await prisma.$transaction(async (tx) => {
+        if (level === null) {
+          await tx.autonomyPolicy.deleteMany({ where: { agentId: agent.id, boardId: board.id } });
+        } else {
+          await tx.autonomyPolicy.upsert({
+            where: { agentId_boardId: { agentId: agent.id, boardId: board.id } },
+            create: {
+              workspaceId: req.ctx!.workspaceId,
+              agentId: agent.id,
+              boardId: board.id,
+              level,
+              confidenceThreshold: confidenceThreshold ?? null,
+            },
+            update: { level, confidenceThreshold: confidenceThreshold ?? null },
+          });
+        }
+        await appendAuditEntry(tx, {
+          workspaceId: req.ctx!.workspaceId,
+          actorId: req.ctx!.actorId,
+          action: "AGENT.SET_AUTONOMY",
+          targetType: "Agent",
+          targetId: agent.id,
+          result: "SUCCESS",
+          resource: `${board.title}: ${level ?? "default"}${confidenceThreshold != null ? ` @ ${confidenceThreshold}` : ""}`,
+        });
+      }, AUDIT_TX_OPTIONS);
+      res.json({ agentId: agent.id, boardId: board.id, level, confidenceThreshold: confidenceThreshold ?? null });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // G14 — when this agent's engagement ends: a date, the end of a sprint, both
 // (whichever comes first), or neither (null clears). Shortening it caps the
 // agent's live grants straight away rather than at their natural expiry.
@@ -207,7 +317,7 @@ const accessSchema = z.object({
 router.patch(
   "/workspaces/:workspaceId/agents/:agentId/access",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const parsed = accessSchema.safeParse(req.body);
@@ -274,7 +384,7 @@ router.patch(
 router.post(
   "/workspaces/:workspaceId/agents/:agentId/rotate-secret",
   requireAuth,
-  requireWorkspaceMember,
+  requireWorkspaceAdmin,
   async (req, res, next) => {
     try {
       const agent = await agentRepo.getAgentById(req.ctx!, req.params.agentId!);

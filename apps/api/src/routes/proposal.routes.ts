@@ -8,6 +8,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
+import { assertWorkspaceAdmin } from "../middleware/requireWorkspaceAdmin.js";
 import { appendAuditEntry, AUDIT_TX_OPTIONS } from "../lib/audit.js";
 import { ConflictError, NotFoundError, ValidationError } from "../lib/errors.js";
 
@@ -42,6 +43,7 @@ async function findReviewableProposal(actorId: string, proposalId: string) {
     where: { id: proposalId, workspace: { members: { some: { actorId } } } },
   });
   if (!proposal) throw new NotFoundError("Proposal not found");
+  await assertWorkspaceAdmin(actorId, proposal.workspaceId); // G11: approving is an admin decision
   return proposal;
 }
 

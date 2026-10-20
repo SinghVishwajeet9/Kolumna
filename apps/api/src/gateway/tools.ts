@@ -4,7 +4,9 @@
 // kolumna-architecture.md §6:
 //
 //   resolve grant → grant live? agent ACTIVE? → tool exists? → scope ⊆ grant?
-//   → input valid? → run handler + write its audit entry in ONE transaction
+//   → input valid? → (gated tools) autonomy + confidence: act now, or queue a
+//   ConfidenceReview for a human → run handler + write its audit entry in ONE
+//   transaction
 //
 // Every outcome is audited, including denials and failures (roadmap G5).
 
@@ -18,6 +20,7 @@ import {
   type Tx,
 } from "../lib/audit.js";
 import { parseScopes, type Scope } from "./scopes.js";
+import { decideAutonomy } from "./autonomy.js";
 import { allocateCardNumber } from "../lib/keys.js";
 
 // What the CALLER supplies. Deliberately not workspaceId/actorId/scopes —
@@ -60,6 +63,30 @@ export type Tool<S extends z.ZodType = z.ZodType> = {
   requiredScope: Scope;
   auditAction: string;
   handler: (input: z.infer<S>, ctx: ToolContext) => Promise<ToolOutcome>;
+  // Phase 4: set on tools that change work. Says what the call touches (whose
+  // board's autonomy policy applies) and what a human would be approving.
+  // Gated tools also accept `confidence` and `reasoning`.
+  gate?: (input: z.infer<S>, tx: Tx, workspaceId: string) => Promise<GateTarget>;
+};
+
+export type GateTarget = { boardId: string; cardId: string | null; summary: string };
+
+// The two extra inputs every gated tool takes. Kept out of each tool's own
+// schema so handlers never see them; describeTools adds them to the
+// advertised JSON Schema.
+const gateMetaSchema = z.object({
+  confidence: z.number().min(0).max(1).nullable().optional(),
+  reasoning: z.string().max(2000).nullable().optional(),
+});
+const GATE_META_JSON = {
+  confidence: {
+    type: "number",
+    minimum: 0,
+    maximum: 1,
+    description:
+      "How sure you are this change is right, 0-1. Depending on your autonomy level, changes below the workspace's threshold (or without a confidence) wait for a human to approve.",
+  },
+  reasoning: { type: "string", maxLength: 2000, description: "One or two sentences on why, shown to the human reviewer." },
 };
 
 export type ToolErrorCode =
@@ -206,6 +233,16 @@ function progress(items: { done: boolean }[]) {
 
 const selfTarget = (ctx: ToolContext) => ({ targetType: "Agent", targetId: ctx.agentId });
 
+const keyOf = (card: { number: number; list: { board: { key: string } } }) => `${card.list.board.key}-${card.number}`;
+
+// Gate for tools that act on one card.
+const cardGate =
+  (describe: (key: string, title: string) => string) =>
+  async (input: { cardId: string }, tx: Tx, workspaceId: string): Promise<GateTarget> => {
+    const card = await findCard(tx, workspaceId, input.cardId);
+    return { boardId: card.boardId, cardId: card.id, summary: describe(keyOf(card), card.title) };
+  };
+
 // --- Read tools ---------------------------------------------------------------
 
 export const listMyTasksTool = defineTool({
@@ -225,9 +262,25 @@ export const listMyTasksTool = defineTool({
     const rank = (c: (typeof cards)[number]) =>
       (c.sprint?.status === "ACTIVE" ? 0 : 10) + (PRIORITY_ORDER[c.priority] ?? 4);
     cards.sort((a, b) => rank(a) - rank(b));
+    // What humans decided about changes it queued for review (Phase 4).
+    const reviews = await ctx.tx.confidenceReview.findMany({
+      where: {
+        agentId: ctx.agentId,
+        OR: [{ status: "PENDING" }, { decidedAt: { gt: new Date(Date.now() - 3 * 86_400_000) } }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
     return {
       output: {
         notice: UNTRUSTED_NOTICE,
+        yourQueuedChanges: reviews.map((r) => ({
+          reviewId: r.id,
+          change: r.summary,
+          status: r.status,
+          ...(r.note ? { reviewerNote: r.note } : {}),
+          ...(r.error ? { error: r.error } : {}),
+        })),
         tasks: cards.map((c) => ({
           cardId: c.id,
           ...planning(c, c.list.board.key),
@@ -394,6 +447,7 @@ export const moveTicketTool = defineTool({
   }),
   requiredScope: "card:write",
   auditAction: "AGENT.MOVE_TICKET",
+  gate: (input, tx, ws) => cardGate((key, title) => `Move ${key} "${title}" to "${input.column}"`)(input, tx, ws),
   handler: async (input, ctx) => {
     const card = await findOwnCard(ctx.tx, ctx, input.cardId);
     const target = await findColumn(ctx.tx, ctx.workspaceId, card.list.boardId, input.column);
@@ -445,6 +499,8 @@ export const addChecklistItemsTool = defineTool({
   }),
   requiredScope: "card:write",
   auditAction: "AGENT.ADD_CHECKLIST_ITEMS",
+  gate: (input, tx, ws) =>
+    cardGate((key) => `Add ${input.items.length} checklist steps to ${key}: ${input.items.join("; ")}`)(input, tx, ws),
   handler: async (input, ctx) => {
     const card = await findOwnCard(ctx.tx, ctx, input.cardId);
     let rank = await nextChecklistRank(ctx.tx, card.id);
@@ -479,6 +535,16 @@ export const completeChecklistItemTool = defineTool({
   }),
   requiredScope: "card:write",
   auditAction: "AGENT.COMPLETE_CHECKLIST_ITEM",
+  gate: async (input, tx, workspaceId) => {
+    const item = await tx.checklistItem.findFirst({ where: { id: input.itemId, workspaceId } });
+    if (!item) throw new ToolError("NOT_FOUND", "Checklist item not found");
+    const card = await findCard(tx, workspaceId, item.cardId);
+    return {
+      boardId: card.boardId,
+      cardId: card.id,
+      summary: `Tick "${item.title}" on ${keyOf(card)}${input.evidenceUrl ? ` (evidence: ${input.evidenceUrl})` : ""}`,
+    };
+  },
   handler: async (input, ctx) => {
     const item = await ctx.tx.checklistItem.findFirst({
       where: { id: input.itemId, workspaceId: ctx.workspaceId },
@@ -584,6 +650,16 @@ export const updateTicketTool = defineTool({
     }),
   requiredScope: "card:write",
   auditAction: "AGENT.UPDATE_TICKET",
+  gate: (input, tx, ws) =>
+    cardGate(
+      (key) =>
+        `Set ${key} ${[
+          input.priority !== undefined && `priority to ${input.priority}`,
+          input.storyPoints !== undefined && `story points to ${input.storyPoints ?? "none"}`,
+        ]
+          .filter(Boolean)
+          .join(" and ")}`,
+    )(input, tx, ws),
   handler: async (input, ctx) => {
     const card = await findOwnCard(ctx.tx, ctx, input.cardId);
     const data = {
@@ -683,6 +759,14 @@ export const createTaskTool = defineTool({
   }),
   requiredScope: "card:create",
   auditAction: "AGENT.CREATE_TASK",
+  gate: async (input, tx, workspaceId) => {
+    const board = await findBoard(tx, workspaceId, input.boardId);
+    return {
+      boardId: board.id,
+      cardId: null,
+      summary: `Create "${input.title}" on ${board.title} (${input.column}${input.addToActiveSprint ? ", active sprint" : ", backlog"})`,
+    };
+  },
   handler: async (input, ctx) => {
     const board = await findBoard(ctx.tx, ctx.workspaceId, input.boardId);
     const list = await findColumn(ctx.tx, ctx.workspaceId, input.boardId, input.column);
@@ -728,6 +812,15 @@ export const assignTaskTool = defineTool({
   }),
   requiredScope: "card:assign",
   auditAction: "AGENT.ASSIGN_TASK",
+  gate: async (input, tx, workspaceId) => {
+    const card = await findCard(tx, workspaceId, input.cardId);
+    const who = input.assigneeActorId ? await tx.actor.findUnique({ where: { id: input.assigneeActorId } }) : null;
+    return {
+      boardId: card.boardId,
+      cardId: card.id,
+      summary: input.assigneeActorId ? `Assign ${keyOf(card)} to ${who?.displayName ?? "an unknown member"}` : `Unassign ${keyOf(card)}`,
+    };
+  },
   handler: async (input, ctx) => {
     const card = await findCard(ctx.tx, ctx.workspaceId, input.cardId);
     if (input.assigneeActorId) {
@@ -777,6 +870,9 @@ export function describeTools(scopes: readonly string[]) {
         string,
         unknown
       >;
+      if (t.gate) {
+        inputSchema.properties = { ...(inputSchema.properties as object), ...GATE_META_JSON };
+      }
       return { name: t.name, description: t.description, inputSchema };
     });
 }
@@ -831,7 +927,18 @@ export async function callTool(name: string, input: unknown, call: CallContext) 
     return fail("FORBIDDEN", `Grant lacks required scope "${tool.requiredScope}"`);
   }
 
-  const parsed = tool.input.safeParse(input ?? {});
+  // Gated tools carry confidence/reasoning alongside their own input.
+  let body: unknown = input ?? {};
+  let meta: { confidence: number | null; reasoning: string | null } = { confidence: null, reasoning: null };
+  if (tool.gate && body && typeof body === "object" && !Array.isArray(body)) {
+    const { confidence, reasoning, ...rest } = body as Record<string, unknown>;
+    const m = gateMetaSchema.safeParse({ confidence, reasoning });
+    if (!m.success) return fail("INVALID_INPUT", z.prettifyError(m.error));
+    meta = { confidence: m.data.confidence ?? null, reasoning: m.data.reasoning ?? null };
+    body = rest;
+  }
+
+  const parsed = tool.input.safeParse(body);
   if (!parsed.success) {
     return fail("INVALID_INPUT", z.prettifyError(parsed.error));
   }
@@ -840,6 +947,61 @@ export async function callTool(name: string, input: unknown, call: CallContext) 
   //    both the change and its record commit, or neither does (G7).
   try {
     return await prisma.$transaction(async (tx) => {
+      // 4a. Autonomy (Phase 4): may it do this now, or does a human decide?
+      if (tool.gate) {
+        const target = await tool.gate(parsed.data, tx, identity.workspaceId);
+        const decision = await decideAutonomy(tx, {
+          agent: grant.agent,
+          boardId: target.boardId,
+          cardId: target.cardId,
+          confidence: meta.confidence,
+        });
+        if (decision.kind === "REVIEW") {
+          // Dry run: prove the action would succeed right now (ownership,
+          // column names…), then undo it — a human should only ever be asked
+          // to approve something that works.
+          await tx.$executeRawUnsafe("SAVEPOINT kolumna_dry_run");
+          await tool.handler(parsed.data, { ...identity, tx });
+          await tx.$executeRawUnsafe("ROLLBACK TO SAVEPOINT kolumna_dry_run");
+
+          const review = await tx.confidenceReview.create({
+            data: {
+              workspaceId: identity.workspaceId,
+              agentId: identity.agentId,
+              boardId: target.boardId,
+              cardId: target.cardId,
+              toolName: tool.name,
+              input: parsed.data as never,
+              summary: target.summary.slice(0, 1000),
+              confidence: meta.confidence,
+              reasoning: meta.reasoning,
+              reason: decision.reason,
+              onBehalfOfActorId: identity.onBehalfOfActorId,
+            },
+          });
+          await appendAuditEntry(tx, {
+            workspaceId: identity.workspaceId,
+            actorId: identity.actorId,
+            onBehalfOfActorId: identity.onBehalfOfActorId,
+            action: tool.auditAction,
+            toolInvoked: tool.name,
+            targetType: target.cardId ? "Card" : "Board",
+            targetId: target.cardId ?? target.boardId,
+            result: "PENDING_APPROVAL",
+            resource: `review ${review.id}: ${decision.why}`.slice(0, 500),
+            reasoningSummary: meta.reasoning,
+            confidence: meta.confidence,
+          });
+          return {
+            status: "PENDING_APPROVAL",
+            reviewId: review.id,
+            change: target.summary,
+            why: decision.why,
+            next: "A human will approve or reject this. Carry on with other work; list_my_tasks shows the decision under yourQueuedChanges.",
+          };
+        }
+      }
+
       const outcome = await tool.handler(parsed.data, { ...identity, tx });
       if (outcome.audit) {
         await appendAuditEntry(tx, {
@@ -852,7 +1014,8 @@ export async function callTool(name: string, input: unknown, call: CallContext) 
           targetId: outcome.audit.targetId,
           result: outcome.audit.result ?? "SUCCESS",
           resource: outcome.audit.resource,
-          reasoningSummary: outcome.audit.reasoningSummary,
+          reasoningSummary: outcome.audit.reasoningSummary ?? meta.reasoning,
+          confidence: meta.confidence,
         });
       }
       return outcome.output;

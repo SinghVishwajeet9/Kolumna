@@ -29,7 +29,21 @@ type Agent = {
   accessUntil: string | null;
   accessSprint: { id: string; name: string; status: string } | null;
   accessEnded: boolean;
+  autonomyLevel: Level;
+  confidenceThreshold: number;
+  boardPolicies: { boardId: string; level: Level; confidenceThreshold: number | null }[];
 };
+
+type Level = "SUGGEST_ONLY" | "ACT_WITH_APPROVAL" | "ACT_AUTONOMOUS";
+type BoardRef = { id: string; title: string };
+
+// Phase 4's three levels, in the words a person deciding would use.
+const LEVELS: { value: Level; label: string; note: string }[] = [
+  { value: "SUGGEST_ONLY", label: "Suggest only", note: "every change waits for approval" },
+  { value: "ACT_WITH_APPROVAL", label: "Act when confident", note: "below the bar, it asks" },
+  { value: "ACT_AUTONOMOUS", label: "Autonomous", note: "acts directly, still audited" },
+];
+const THRESHOLDS = [0.5, 0.6, 0.7, 0.8, 0.9].map((t) => ({ value: String(t), label: `at ${Math.round(t * 100)}%+ confidence` }));
 
 type OpenSprint = { id: string; name: string; status: string; board: { title: string } };
 
@@ -59,14 +73,20 @@ function timeAgo(iso: string | null) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-async function fetchAgents(): Promise<{ workspace: Workspace | null; agents: Agent[]; sprints: OpenSprint[] }> {
+async function fetchAgents(): Promise<{
+  workspace: Workspace | null;
+  agents: Agent[];
+  sprints: OpenSprint[];
+  boards: BoardRef[];
+}> {
   const workspace = (await api.get<Workspace[]>("/workspaces"))[0] ?? null;
-  if (!workspace) return { workspace: null, agents: [], sprints: [] };
-  const [agents, sprints] = await Promise.all([
+  if (!workspace) return { workspace: null, agents: [], sprints: [], boards: [] };
+  const [agents, sprints, boards] = await Promise.all([
     api.get<Agent[]>(`/workspaces/${workspace.id}/agents`),
     api.get<OpenSprint[]>(`/workspaces/${workspace.id}/sprints`),
+    api.get<BoardRef[]>(`/workspaces/${workspace.id}/boards`),
   ]);
-  return { workspace, agents, sprints };
+  return { workspace, agents, sprints, boards };
 }
 
 // "2026-11-03T00:00:00Z" → "2026-11-03" for a date input, and back as the END
@@ -80,6 +100,8 @@ export default function AgentsPage() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [sprints, setSprints] = useState<OpenSprint[]>([]);
+  const [boards, setBoards] = useState<BoardRef[]>([]);
+  const [level, setLevel] = useState<Level>("ACT_WITH_APPROVAL");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,10 +121,11 @@ export default function AgentsPage() {
 
   function refresh() {
     return fetchAgents().then(
-      ({ workspace, agents, sprints }) => {
+      ({ workspace, agents, sprints, boards }) => {
         setWorkspace(workspace);
         setAgents(agents);
         setSprints(sprints);
+        setBoards(boards);
         setLoaded(true);
       },
       () => {
@@ -146,6 +169,7 @@ export default function AgentsPage() {
           modelProvider: "external",
           capabilities: { client },
           allowedScopes: scopes,
+          autonomyLevel: level,
         },
       );
       // Registering and activating are separate, audited decisions; doing
@@ -272,6 +296,15 @@ export default function AgentsPage() {
                 </div>
 
                 {a.status !== "REVOKED" && (
+                  <AutonomyRow
+                    agent={a}
+                    boards={boards}
+                    onDefault={(body) => act(() => api.patch(path(a, "autonomy"), body))}
+                    onBoard={(boardId, lvl) => act(() => api.put(path(a, `autonomy/boards/${boardId}`), { level: lvl }))}
+                  />
+                )}
+
+                {a.status !== "REVOKED" && (
                   <AccessRow
                     agent={a}
                     sprints={sprints}
@@ -336,6 +369,26 @@ export default function AgentsPage() {
                   <span>
                     <span className="text-fg">{s.label}</span>{" "}
                     <span className="text-[12px] text-faint" style={mono}>{s.id}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <p className="mt-6 mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+              How much it may do without you
+            </p>
+            <div className="flex flex-col gap-2">
+              {LEVELS.map((l) => (
+                <label key={l.value} className="flex cursor-pointer items-start gap-3 text-[14px]">
+                  <input
+                    type="radio"
+                    name="autonomy"
+                    className="mt-1 accent-[#5af7b3]"
+                    checked={level === l.value}
+                    onChange={() => setLevel(l.value)}
+                  />
+                  <span>
+                    <span className="text-fg">{l.label}</span> <span className="text-[12px] text-faint">— {l.note}</span>
                   </span>
                 </label>
               ))}
@@ -439,6 +492,86 @@ function AccessRow({
         <span className="text-faint">· whichever comes first</span>
       ) : (
         <span className="text-faint">· never (until you suspend or revoke it)</span>
+      )}
+    </div>
+  );
+}
+
+// Phase 4: the agent's default autonomy, its confidence bar, and per-board
+// overrides ("autonomous on Docs, suggest-only on Payments").
+function AutonomyRow({
+  agent,
+  boards,
+  onDefault,
+  onBoard,
+}: {
+  agent: Agent;
+  boards: BoardRef[];
+  onDefault: (body: { level?: Level; confidenceThreshold?: number }) => Promise<void>;
+  onBoard: (boardId: string, level: Level | null) => Promise<void>;
+}) {
+  const [showBoards, setShowBoards] = useState(agent.boardPolicies.length > 0);
+  const levelLabel = (l: Level) => LEVELS.find((x) => x.value === l)!.label;
+  return (
+    <div className="mt-5 border-t border-line pt-4 text-[13px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-faint">Autonomy</span>
+        <div className="w-[200px]">
+          <Select
+            compact
+            value={agent.autonomyLevel}
+            onChange={(v) => v && void onDefault({ level: v as Level })}
+            options={LEVELS.map((l) => ({ value: l.value, label: l.label }))}
+          />
+        </div>
+        {agent.autonomyLevel === "ACT_WITH_APPROVAL" && (
+          <div className="w-[210px]">
+            <Select
+              compact
+              value={String(agent.confidenceThreshold)}
+              onChange={(v) => v && void onDefault({ confidenceThreshold: Number(v) })}
+              options={
+                THRESHOLDS.some((t) => t.value === String(agent.confidenceThreshold))
+                  ? THRESHOLDS
+                  : [...THRESHOLDS, { value: String(agent.confidenceThreshold), label: `at ${Math.round(agent.confidenceThreshold * 100)}%+ confidence` }]
+              }
+            />
+          </div>
+        )}
+        <span className="text-faint">· {LEVELS.find((l) => l.value === agent.autonomyLevel)!.note}</span>
+        {boards.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowBoards((v) => !v)}
+            className="ml-auto text-faint hover:text-fg"
+            style={mono}
+          >
+            {showBoards ? "hide boards" : `per board${agent.boardPolicies.length ? ` (${agent.boardPolicies.length})` : ""}`}
+          </button>
+        )}
+      </div>
+      {showBoards && (
+        <ul className="mt-3 flex flex-col gap-2 pl-[74px]">
+          {boards.map((b) => {
+            const policy = agent.boardPolicies.find((p) => p.boardId === b.id);
+            return (
+              <li key={b.id} className="flex items-center gap-3">
+                <span className="w-[160px] truncate text-muted">{b.title}</span>
+                <div className="w-[230px]">
+                  <Select
+                    compact
+                    value={policy?.level ?? null}
+                    onChange={(v) => void onBoard(b.id, v as Level | null)}
+                    options={[
+                      { value: null, label: `Default (${levelLabel(agent.autonomyLevel)})` },
+                      ...LEVELS.map((l) => ({ value: l.value, label: l.label })),
+                    ]}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
