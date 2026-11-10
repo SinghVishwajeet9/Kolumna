@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
 
         {reviews && (
           <>
-            <h2 className="mt-10 mb-3 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+            <h2 className="mt-10 mb-3 text-[14px] font-semibold text-fg" style={mono}>
               Waiting on you · {pending.length + proposals.length}
             </h2>
             {pending.length + proposals.length === 0 && (
@@ -143,7 +143,7 @@ export default function ApprovalsPage() {
 
             {decided.length > 0 && (
               <>
-                <h2 className="mt-12 mb-3 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+                <h2 className="mt-12 mb-3 text-[14px] font-semibold text-fg" style={mono}>
                   Recently decided
                 </h2>
                 <ul className="flex flex-col divide-y divide-line border-y border-line">

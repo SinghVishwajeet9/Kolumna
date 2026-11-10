@@ -17,7 +17,7 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { Plus, Lightning, ListChecks, ChartLine } from "@phosphor-icons/react";
 import { PageLoader } from "@/components/ui/Loader";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Column } from "@/components/board/Column";
 import { CardTile } from "@/components/board/CardTile";
@@ -45,16 +45,29 @@ export default function BoardPage() {
   // back under the user's cursor.
   const dragging = useRef(false);
 
+  // Tasks typed into a column but not saved yet. They're shown straight away
+  // and merged into every board refresh until the server has them, so a poll
+  // landing mid-save can't make a new card flicker out.
+  const pending = useRef(new Map<string, BoardCard>());
+  const withPending = useCallback((data: Board): Board => {
+    if (!pending.current.size) return data;
+    const extra = [...pending.current.values()];
+    return {
+      ...data,
+      lists: data.lists.map((l) => ({ ...l, cards: [...l.cards, ...extra.filter((c) => c.listId === l.id)] })),
+    };
+  }, []);
+
   const load = useCallback(async () => {
     if (dragging.current) return;
     try {
       const data = await api.get<Board>(`/boards/${boardId}`);
-      if (!dragging.current) setBoard(data);
+      if (!dragging.current) setBoard(withPending(data));
       setError(null);
     } catch {
       setError("Couldn't load this board.");
     }
-  }, [boardId]);
+  }, [boardId, withPending]);
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
@@ -70,7 +83,7 @@ export default function BoardPage() {
       api.get<Board>(`/boards/${boardId}`).then(
         (data) => {
           if (cancelled || dragging.current) return;
-          setBoard(data);
+          setBoard(withPending(data));
           setError(null);
         },
         () => !cancelled && setError("Couldn't load this board."),
@@ -82,7 +95,7 @@ export default function BoardPage() {
       cancelled = true;
       clearInterval(t);
     };
-  }, [user, boardId]);
+  }, [user, boardId, withPending]);
 
   useEffect(() => {
     if (board?.workspaceId) {
@@ -163,8 +176,29 @@ export default function BoardPage() {
   }
 
   async function addCard(listId: string, title: string) {
-    await api.post(`/lists/${listId}/cards`, { title });
-    await load();
+    const temp: BoardCard = {
+      id: `temp-${crypto.randomUUID()}`,
+      listId,
+      title,
+      rank: Number.MAX_SAFE_INTEGER,
+      number: 0,
+      priority: "NONE",
+      storyPoints: null,
+      epic: null,
+      assignee: null,
+      checklistItems: [],
+      _count: { comments: 0 },
+    };
+    pending.current.set(temp.id, temp);
+    setBoard((b) => b && withPending({ ...b, lists: b.lists.map((l) => ({ ...l, cards: l.cards.filter((c) => !c.id.startsWith("temp-")) })) }));
+    try {
+      await api.post(`/lists/${listId}/cards`, { title });
+    } catch (err) {
+      throw new Error(err instanceof ApiError ? err.message : "Couldn't add that task. Is the API running?");
+    } finally {
+      pending.current.delete(temp.id);
+      await load();
+    }
   }
 
   async function addColumn(e: React.FormEvent) {

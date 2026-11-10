@@ -346,7 +346,7 @@ export default function AgentsPage() {
             <h2 className="mb-6 text-[22px] font-medium" style={mono}>Connect an agent</h2>
             <Field label="Name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Claude Code (my laptop)" required />
 
-            <p className="mt-6 mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>Which tool</p>
+            <p className="mt-6 mb-2 text-[14px] font-semibold text-fg" style={mono}>Which tool</p>
             <div className="flex flex-wrap gap-2">
               {CLIENTS.map((c) => (
                 <button
@@ -361,7 +361,7 @@ export default function AgentsPage() {
               ))}
             </div>
 
-            <p className="mt-6 mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+            <p className="mt-6 mb-2 text-[14px] font-semibold text-fg" style={mono}>
               What it may ever do (its ceiling)
             </p>
             <div className="flex flex-col gap-2">
@@ -383,7 +383,7 @@ export default function AgentsPage() {
               ))}
             </div>
 
-            <p className="mt-6 mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+            <p className="mt-6 mb-2 text-[14px] font-semibold text-fg" style={mono}>
               How much it may do without you
             </p>
             <div className="flex flex-col gap-2">

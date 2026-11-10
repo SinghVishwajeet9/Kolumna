@@ -15,6 +15,10 @@ import { GooeyButton } from "@/components/marketing/GooeyButton";
 type Workspace = { id: string; name: string; slug: string };
 type Board = { id: string; title: string };
 
+// Every new board starts with these columns, left to right. The last one is
+// where finished work goes (Done = the board's last column), so it stays last.
+const STARTER_COLUMNS = ["To Do", "In Progress", "In Review", "Done"];
+
 // Same multicolour palette as the landing page's cards / colour-run, so a
 // wall of boards reads as one family rather than flat grey.
 const CARD_COLORS = [
@@ -88,6 +92,7 @@ export default function BoardsPage() {
     try {
       const board = await api.post<Board>(`/workspaces/${workspace.id}/boards`, {
         title: newTitle,
+        columns: STARTER_COLUMNS,
       });
       // Add the new board straight into local state instead of re-fetching
       // the whole list — one fewer network round trip, and it appears
@@ -278,6 +283,9 @@ export default function BoardsPage() {
                 placeholder="Q4 Product Roadmap"
                 required
               />
+              <p className="mt-3 text-[13px] text-faint">
+                Starts with {STARTER_COLUMNS.join(" · ")}. You can add more columns on the board.
+              </p>
               {createError && <p className="mt-4 text-[14px] text-[#fca5a5]">{createError}</p>}
               <div className="mt-6 flex items-center justify-end gap-3">
                 <button

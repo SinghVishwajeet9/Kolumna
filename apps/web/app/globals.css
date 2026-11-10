@@ -34,6 +34,22 @@
   --font-mono: "Departure Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
 }
 
+/* Inside the app and the login pages, the pixel font gives way to the clean
+   sans: it reads as decoration on the landing page but makes working screens
+   (headings, card keys, buttons) harder to read. Everything styled with
+   var(--font-mono) picks this up. Real code (agent secrets, MCP config,
+   invite links) still gets a proper monospace. */
+.app-ui {
+  --font-mono: var(--font-sans);
+  --font-code: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+.app-ui code,
+.app-ui pre,
+.app-ui kbd {
+  /* !important: some snippets set font-family inline */
+  font-family: var(--font-code) !important;
+}
+
 /* Self-hosted: Departure Mono isn't on Fontshare or Google Fonts. MIT
    licensed, from github.com/rektdeckard/departure-mono. */
 @font-face {

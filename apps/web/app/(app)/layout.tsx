@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 // its own nav instead.
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="flex min-h-screen bg-bg">
+    <div className="app-ui flex min-h-screen bg-bg">
       <Sidebar />
       <div className="min-w-0 flex-1">{children}</div>
     </div>

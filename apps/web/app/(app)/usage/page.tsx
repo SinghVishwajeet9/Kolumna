@@ -217,7 +217,7 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-10">
-      <h2 className="mb-3 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+      <h2 className="mb-3 text-[14px] font-semibold text-fg" style={mono}>
         {title}
       </h2>
       {children}

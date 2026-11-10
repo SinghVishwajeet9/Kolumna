@@ -160,7 +160,7 @@ function SprintReport() {
             </div>
 
             <section className="mt-10">
-              <h2 className="mb-3 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+              <h2 className="mb-3 text-[14px] font-semibold text-fg" style={mono}>
                 Agents this sprint
               </h2>
               {report.agents.length === 0 ? (

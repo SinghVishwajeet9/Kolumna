@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus } from "@phosphor-icons/react";
+import { Plus, ArrowElbowDownLeft } from "@phosphor-icons/react";
 import type { BoardList } from "./types";
 import { CardTile } from "./CardTile";
 
@@ -16,6 +16,8 @@ export function Column({
   list: BoardList;
   boardKey: string;
   onOpenCard: (cardId: string) => void;
+  /** Adds the card (the board shows it straight away) and resolves once
+   * saved; rejects with a message if saving failed. */
   onAddCard: (listId: string, title: string) => Promise<void>;
 }) {
   // The column itself is a drop target, so a card can land in an EMPTY column
@@ -23,12 +25,28 @@ export function Column({
   const { setNodeRef, isOver } = useDroppable({ id: list.id, data: { type: "list" } });
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    await onAddCard(list.id, title.trim());
+  function close() {
+    setAdding(false);
     setTitle("");
+    setError(null);
+  }
+
+  // Enter adds the task and keeps the box open for the next one, like Jira.
+  // The board shows the new card immediately; if saving fails, the text comes
+  // back so nothing typed is lost.
+  function submit() {
+    const t = title.trim();
+    if (!t) return;
+    setTitle("");
+    setError(null);
+    box.current?.focus();
+    onAddCard(list.id, t).catch((err: unknown) => {
+      setTitle(t);
+      setError(err instanceof Error ? err.message : "Couldn't add that task.");
+    });
   }
 
   return (
@@ -43,41 +61,75 @@ export function Column({
       }}
     >
       <header className="flex items-center gap-2 px-2.5 pt-2 pb-2.5">
-        <h2 className="text-[13px] font-medium text-muted">{list.title}</h2>
+        <h2 className="text-[13px] font-semibold text-fg">{list.title}</h2>
         <span className="text-[13px] text-faint">{list.cards.length}</span>
       </header>
 
       <div ref={setNodeRef} className="flex min-h-[8px] flex-1 flex-col gap-1.5 overflow-y-auto">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {list.cards.map((card) => (
-            <CardTile key={card.id} card={card} boardKey={boardKey} onOpen={() => onOpenCard(card.id)} />
-          ))}
+          {list.cards.map((card) =>
+            card.id.startsWith("temp-") ? (
+              // Not saved yet: visible straight away, but not draggable or openable.
+              <div key={card.id} className="pointer-events-none opacity-60">
+                <CardTile card={card} boardKey={boardKey} overlay />
+              </div>
+            ) : (
+              <CardTile key={card.id} card={card} boardKey={boardKey} onOpen={() => onOpenCard(card.id)} />
+            ),
+          )}
         </SortableContext>
       </div>
 
       <div className={list.cards.length ? "pt-1.5" : ""}>
         {adding ? (
-          <form onSubmit={submit}>
-            <input
+          <div
+            className="bg-[#262628] p-2.5 shadow-[inset_0_0_0_1px_rgba(125,180,255,0.7)]"
+            style={{ borderRadius: "8px" }}
+          >
+            <textarea
+              ref={box}
               autoFocus
+              rows={2}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => !title && setAdding(false)}
-              onKeyDown={(e) => e.key === "Escape" && setAdding(false)}
-              placeholder="What needs to be done? — Enter"
-              className="w-full bg-[#262628] px-3 py-2.5 text-[14px] text-fg shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]"
-              style={{ borderRadius: "8px" }}
+              onBlur={() => !title.trim() && close()}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") close();
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="What needs to be done?"
+              className="block w-full resize-none bg-transparent text-[14px] leading-snug text-fg outline-none placeholder:text-faint"
             />
-          </form>
+            {error && <p className="mt-1.5 text-[12px] text-[#fca5a5]">{error}</p>}
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[11px] text-faint">Enter to add · Esc to close</span>
+              <button
+                type="button"
+                // mousedown, not click: fires before the textarea's blur closes the box
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  submit();
+                }}
+                disabled={!title.trim()}
+                title="Add task"
+                className="flex h-7 w-7 items-center justify-center bg-white/10 text-fg transition-colors hover:bg-white/20 disabled:opacity-40"
+                style={{ borderRadius: "6px" }}
+              >
+                <ArrowElbowDownLeft size={14} />
+              </button>
+            </div>
+          </div>
         ) : (
           <button
             type="button"
             onClick={() => setAdding(true)}
-            title="Add card"
-            className="flex h-7 w-full items-center justify-center border border-dashed border-line-bright/70 text-faint transition-colors hover:border-white/40 hover:bg-white/[0.03] hover:text-fg"
+            className="flex h-8 w-full items-center gap-1.5 px-2.5 text-[13px] text-faint transition-colors hover:bg-white/[0.05] hover:text-fg"
             style={{ borderRadius: "8px" }}
           >
-            <Plus size={14} />
+            <Plus size={14} /> Create
           </button>
         )}
       </div>

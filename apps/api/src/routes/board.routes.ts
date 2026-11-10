@@ -9,6 +9,12 @@ import { NotFoundError, ValidationError } from "../lib/errors.js";
 const router = Router();
 
 const titleSchema = z.object({ title: z.string().min(1) });
+// Optional starting columns, left to right. The last one is "done" (Done is
+// the board's last column by rank), so the web sends e.g.
+// ["To Do", "In Progress", "In Review", "Done"].
+const createBoardSchema = titleSchema.extend({
+  columns: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
+});
 
 // Nested under /workspaces/:workspaceId — requireWorkspaceMember reads
 // workspaceId from req.params, so it must match that param name.
@@ -32,10 +38,10 @@ router.post(
   requireWorkspaceMember,
   async (req, res, next) => {
     try {
-      const parsed = titleSchema.safeParse(req.body);
+      const parsed = createBoardSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.message);
 
-      const board = await boardRepo.createBoard(req.ctx!, parsed.data.title);
+      const board = await boardRepo.createBoard(req.ctx!, parsed.data.title, parsed.data.columns);
       await writeAuditEntry({
         workspaceId: req.ctx!.workspaceId,
         actorId: req.ctx!.actorId,

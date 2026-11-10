@@ -27,7 +27,7 @@ const mono = { fontFamily: "var(--font-mono)" };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-3 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+    <h3 className="mb-3 text-[14px] font-semibold text-fg" style={mono}>
       {children}
     </h3>
   );
@@ -177,7 +177,7 @@ export function CardPanel({
           <div className="flex flex-col gap-8 p-7">
             <header className="flex items-start justify-between gap-4">
               <div>
-                <p className="mb-2 text-[12px] uppercase tracking-[0.12em] text-faint" style={mono}>
+                <p className="mb-2 text-[14px] font-semibold text-fg" style={mono}>
                   <span className="text-muted">
                     {card.board.key}-{card.number}
                   </span>{" "}

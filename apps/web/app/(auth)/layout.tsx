@@ -5,7 +5,7 @@ import Image from "next/image";
 // two corners. Each page renders its own card into the middle.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-screen bg-bg items-center justify-center overflow-hidden px-6 py-16">
+    <div className="app-ui relative flex min-h-screen bg-bg items-center justify-center overflow-hidden px-6 py-16">
       <Image
         src="/star.png"
         alt=""

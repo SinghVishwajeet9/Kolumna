@@ -110,13 +110,20 @@ export async function getBoardView(actorId: string, boardId: string) {
   return board && { ...board, activeSprint };
 }
 
-export async function createBoard(ctx: TenantContext, title: string) {
-  return prisma.$transaction(async (tx) =>
-    tx.board.create({
+/** Creates a board, plus its starting columns (left to right) if given — in
+ * one transaction, so a board never exists half-made. */
+export async function createBoard(ctx: TenantContext, title: string, columns: string[] = []) {
+  return prisma.$transaction(async (tx) => {
+    const board = await tx.board.create({
       data: { title, workspaceId: ctx.workspaceId, key: await uniqueBoardKey(tx, ctx.workspaceId, title) },
-    }),
-    AUDIT_TX_OPTIONS,
-  );
+    });
+    if (columns.length) {
+      await tx.list.createMany({
+        data: columns.map((t, i) => ({ title: t, rank: i + 1, boardId: board.id, workspaceId: ctx.workspaceId })),
+      });
+    }
+    return board;
+  }, AUDIT_TX_OPTIONS);
 }
 
 export async function updateBoard(ctx: TenantContext, boardId: string, title: string) {
