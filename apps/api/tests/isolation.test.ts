@@ -17,6 +17,7 @@ import type { TenantContext } from "../src/lib/tenant-context.js";
 import * as boardRepo from "../src/repositories/board.repo.js";
 import * as listRepo from "../src/repositories/list.repo.js";
 import * as cardRepo from "../src/repositories/card.repo.js";
+import { deleteActors } from "./cleanup.js";
 
 // Unique suffix per run so repeated test runs never collide on the
 // Workspace.slug unique constraint.
@@ -90,7 +91,7 @@ afterAll(async () => {
   await prisma.workspace.deleteMany({ where: { slug: { contains: runId } } });
   // Actor is the parent of User — deleting a User leaves its Actor behind, so
   // delete the actors themselves (cascades to their User rows).
-  await prisma.actor.deleteMany({ where: { id: { in: actorIds } } });
+  await deleteActors(...actorIds);
 });
 
 describe("tenant isolation", () => {

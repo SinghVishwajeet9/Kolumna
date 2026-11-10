@@ -9,6 +9,7 @@ import * as boardRepo from "../src/repositories/board.repo.js";
 import * as listRepo from "../src/repositories/list.repo.js";
 import * as cardRepo from "../src/repositories/card.repo.js";
 import type { TenantContext } from "../src/lib/tenant-context.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 const actorIds: string[] = [];
@@ -33,8 +34,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.workspace.deleteMany({ where: { id: { in: workspaceIds } } });
-  await prisma.actor.deleteMany({ where: { id: { in: actorIds } } });
+  await deleteWorkspaces(...workspaceIds);
+  await deleteActors(...actorIds);
 });
 
 describe("board keys", () => {

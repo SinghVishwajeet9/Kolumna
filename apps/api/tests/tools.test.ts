@@ -8,6 +8,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { callTool, describeTools, ToolError, type ToolErrorCode } from "../src/gateway/tools.js";
 import { createGrant } from "../src/gateway/agentGrant.repo.js";
 import { startRun, RunRefusedError } from "../src/gateway/runs.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const runTag = Date.now().toString(36);
 const created = { actorIds: [] as string[], workspaceIds: [] as string[] };
@@ -105,8 +106,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.workspace.deleteMany({ where: { id: { in: created.workspaceIds } } });
-  await prisma.actor.deleteMany({ where: { id: { in: created.actorIds } } });
+  await deleteWorkspaces(...created.workspaceIds);
+  await deleteActors(...created.actorIds);
 });
 
 describe("callTool enforcement pipeline", () => {

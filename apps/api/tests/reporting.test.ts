@@ -9,6 +9,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { callTool } from "../src/gateway/tools.js";
 import { createGrant } from "../src/gateway/agentGrant.repo.js";
 import { suggestAutonomy, type Reliability } from "../src/lib/reliability.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 let server: HttpServer;
@@ -76,8 +77,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server?.close();
-  await prisma.workspace.deleteMany({ where: { id: workspaceId } });
-  await prisma.actor.deleteMany({ where: { id: { in: [humanActorId, agentActorId] } } });
+  await deleteWorkspaces(workspaceId);
+  await deleteActors(humanActorId, agentActorId);
 });
 
 describe("completion tracking", () => {

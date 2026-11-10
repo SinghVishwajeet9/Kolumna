@@ -12,6 +12,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { verifyChain } from "../src/lib/audit.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 let server: HttpServer;
@@ -87,10 +88,8 @@ beforeAll(async () => {
 afterAll(async () => {
   server?.close();
   const user = await prisma.user.findUnique({ where: { email: `mcp-${tag}@test.dev` } });
-  await prisma.workspace.deleteMany({ where: { id: workspaceId } });
-  await prisma.actor.deleteMany({
-    where: { id: { in: [agent?.actorId, user?.actorId].filter(Boolean) as string[] } },
-  });
+  await deleteWorkspaces(workspaceId);
+  await deleteActors(agent?.actorId, user?.actorId);
 });
 
 describe("MCP endpoint", () => {

@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { verifyChain } from "../src/lib/audit.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 let server: HttpServer;
@@ -44,8 +45,8 @@ beforeAll(async () => {
 afterAll(async () => {
   server?.close();
   const user = await prisma.user.findUnique({ where: { email: `plan-${tag}@test.dev` } });
-  await prisma.workspace.deleteMany({ where: { id: workspaceId } });
-  if (user) await prisma.actor.deleteMany({ where: { id: user.actorId } });
+  await deleteWorkspaces(workspaceId);
+  await deleteActors(user?.actorId);
 });
 
 describe("planning", () => {

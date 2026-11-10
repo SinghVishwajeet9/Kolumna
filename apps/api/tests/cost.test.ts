@@ -9,6 +9,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { callTool, ToolError } from "../src/gateway/tools.js";
 import { createGrant } from "../src/gateway/agentGrant.repo.js";
+import { deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 let server: HttpServer;
@@ -82,8 +83,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server?.close();
-  await prisma.workspace.deleteMany({ where: { id: { in: [workspaceId, otherWorkspaceId] } } });
-  await prisma.actor.deleteMany({ where: { id: { in: [adminActorId, memberActorId, agentActorId] } } });
+  await deleteWorkspaces(workspaceId, otherWorkspaceId);
+  await deleteActors(adminActorId, memberActorId, agentActorId);
 });
 
 describe("report_usage", () => {

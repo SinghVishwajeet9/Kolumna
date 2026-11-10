@@ -6,6 +6,7 @@ import type { Server as HttpServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
+import { deleteActors } from "./cleanup.js";
 
 const tag = Date.now().toString(36);
 let server: HttpServer;
@@ -45,7 +46,7 @@ afterAll(async () => {
   server?.close();
   const ids = Object.values(actor);
   await prisma.workspace.deleteMany({ where: { members: { some: { actorId: { in: ids }, role: "OWNER" } } } });
-  await prisma.actor.deleteMany({ where: { id: { in: ids } } });
+  await deleteActors(...ids);
 });
 
 describe("invites", () => {

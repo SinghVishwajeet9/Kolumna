@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
 import { getLineageForTarget, verifyChain, writeAuditEntry, GENESIS_HASH } from "../src/lib/audit.js";
+import { ids, deleteWorkspaces, deleteActors } from "./cleanup.js";
 
 const runId = Date.now().toString(36);
 let workspaceId: string;
@@ -29,9 +30,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.auditEntry.deleteMany({ where: { workspaceId } });
-  await prisma.workspace.deleteMany({ where: { id: workspaceId } });
-  await prisma.actor.deleteMany({ where: { id: actorId } });
+  await prisma.auditEntry.deleteMany({ where: { workspaceId: ids(workspaceId) } });
+  await deleteWorkspaces(workspaceId);
+  await deleteActors(actorId);
 });
 
 describe("audit chain", () => {

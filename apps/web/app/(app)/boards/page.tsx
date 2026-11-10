@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageLoader } from "@/components/ui/Loader";
 import { currentWorkspace } from "@/lib/workspace";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { LogoMark } from "@/components/Logo";
 import { Field } from "@/components/ui/Field";
@@ -45,6 +45,8 @@ export default function BoardsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [makingWorkspace, setMakingWorkspace] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -63,7 +65,7 @@ export default function BoardsPage() {
       ({ workspace, boards }) => {
         setWorkspace(workspace);
         setBoards(boards);
-        setError(workspace ? null : "You don't have a workspace yet.");
+        setError(null); // no workspace isn't an error: the page offers to create one
         setLoading(false);
       },
       () => {
@@ -82,6 +84,7 @@ export default function BoardsPage() {
     if (!workspace || !newTitle.trim()) return;
 
     setCreating(true);
+    setCreateError(null);
     try {
       const board = await api.post<Board>(`/workspaces/${workspace.id}/boards`, {
         title: newTitle,
@@ -92,8 +95,27 @@ export default function BoardsPage() {
       setBoards((prev) => [...prev, board]);
       setNewTitle("");
       setIsModalOpen(false);
+    } catch (err) {
+      // Never fail silently: say what went wrong inside the dialog.
+      setCreateError(err instanceof ApiError ? err.message : "Couldn't create the board. Is the API running?");
     } finally {
       setCreating(false);
+    }
+  }
+
+  // Someone with no workspace — they left or were removed from their last
+  // one — would otherwise be stuck on a page where nothing works.
+  async function createOwnWorkspace() {
+    setMakingWorkspace(true);
+    try {
+      const name = user?.name ? `${user.name}'s Workspace` : "My Workspace";
+      await api.post("/workspaces", { name });
+      setLoading(true);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't create a workspace.");
+    } finally {
+      setMakingWorkspace(false);
     }
   }
 
@@ -113,13 +135,18 @@ export default function BoardsPage() {
             )}
           </div>
 
+          {workspace && (
           <GooeyButton
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setCreateError(null);
+              setIsModalOpen(true);
+            }}
             className="group flex shrink-0 items-center gap-2 bg-[#ffffff] px-6 py-3.5 text-[15px] font-medium text-bg"
             style={{ borderRadius: "8px", fontFamily: "var(--font-mono)" }}
           >
             + New board
           </GooeyButton>
+          )}
         </div>
 
         {loading && <PageLoader />}
@@ -142,7 +169,29 @@ export default function BoardsPage() {
           </div>
         )}
 
-        {!loading && !error && boards.length === 0 && (
+        {!loading && !error && !workspace && (
+          <div
+            className="relative border border-dashed border-line px-8 py-16 text-center"
+            style={{ borderRadius: "14px" }}
+          >
+            <CornerMarks />
+            <p className="text-[17px] text-muted">You&apos;re not in a workspace yet.</p>
+            <p className="mt-1 text-[14px] text-faint">
+              Create your own, or open an invite link from a teammate to join theirs.
+            </p>
+            <button
+              type="button"
+              onClick={() => void createOwnWorkspace()}
+              disabled={makingWorkspace}
+              className="mt-6 bg-[#ffffff] px-6 py-3 text-[14px] font-medium text-bg disabled:opacity-60"
+              style={{ borderRadius: "8px", fontFamily: "var(--font-mono)" }}
+            >
+              {makingWorkspace ? "Creating…" : "Create a workspace"}
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && workspace && boards.length === 0 && (
           <div
             className="relative border border-dashed border-line px-8 py-16 text-center"
             style={{ borderRadius: "14px" }}
@@ -229,6 +278,7 @@ export default function BoardsPage() {
                 placeholder="Q4 Product Roadmap"
                 required
               />
+              {createError && <p className="mt-4 text-[14px] text-[#fca5a5]">{createError}</p>}
               <div className="mt-6 flex items-center justify-end gap-3">
                 <button
                   type="button"
