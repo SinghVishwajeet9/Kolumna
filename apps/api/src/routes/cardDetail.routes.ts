@@ -181,7 +181,7 @@ router.get(
     try {
       const memberships = await prisma.membership.findMany({
         where: { workspaceId: req.ctx!.workspaceId },
-        include: { actor: { include: { agent: { select: { status: true } } } } },
+        include: { actor: { include: { agent: { select: { status: true } }, user: { select: { email: true } } } } },
         orderBy: { createdAt: "asc" },
       });
       res.json(
@@ -191,6 +191,7 @@ router.get(
           type: m.actor.type,
           role: m.role,
           agentStatus: m.actor.agent?.status ?? null,
+          email: m.actor.user?.email ?? null, // humans only — teammates see each other's address
         })),
       );
     } catch (err) {

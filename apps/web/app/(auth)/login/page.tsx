@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { safeNext } from "@/lib/next-path";
 import { Logo } from "@/components/Logo";
 import { Field } from "@/components/ui/Field";
 import { CornerMarks } from "@/components/ui/CornerMarks";
 import { GooeyButton } from "@/components/marketing/GooeyButton";
 
+// useSearchParams needs a Suspense boundary for production builds.
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  return (
+    <Suspense>
+      <Form />
+    </Suspense>
+  );
+}
+
+function Form() {
+  // ?next= brings you back where you came from (e.g. an invite link);
+  // ?email= pre-fills the address an invite was sent to.
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -22,9 +36,9 @@ export default function LoginPage() {
   // Already logged in? Don't show a login form — bounce to the boards.
   useEffect(() => {
     if (!loading && user) {
-      router.push("/boards");
+      router.push(next);
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, next]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,7 +47,7 @@ export default function LoginPage() {
     try {
       await api.post("/auth/login", { email, password });
       await refreshUser(); // tell the shared auth state a login just happened
-      router.push("/boards");
+      router.push(next);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -115,7 +129,7 @@ export default function LoginPage() {
       <p className="mt-7 text-[14px] text-muted">
         New here?{" "}
         <Link
-          href="/signup"
+          href={params.toString() ? `/signup?${params.toString()}` : "/signup"}
           className="text-accent transition-opacity hover:opacity-80"
         >
           Create an account

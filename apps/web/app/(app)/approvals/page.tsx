@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageLoader } from "@/components/ui/Loader";
+import { currentWorkspace } from "@/lib/workspace";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { refreshSidebar } from "@/components/Sidebar";
@@ -41,7 +42,7 @@ export default function ApprovalsPage() {
 
   const load = useCallback(async () => {
     try {
-      const ws = (await api.get<Workspace[]>("/workspaces"))[0];
+      const ws = await currentWorkspace<Workspace>();
       if (!ws) return;
       const [r, p] = await Promise.all([
         api.get<Review[]>(`/workspaces/${ws.id}/reviews`),

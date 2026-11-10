@@ -15,6 +15,8 @@ function required(name: string): string {
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+  // Where links we hand out (invites) should point: the web app.
+  webUrl: process.env.WEB_URL ?? process.env.CORS_ORIGIN ?? "http://localhost:3000",
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
 };

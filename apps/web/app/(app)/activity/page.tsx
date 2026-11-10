@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
 import { PageLoader } from "@/components/ui/Loader";
+import { pickWorkspace } from "@/lib/workspace";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -54,7 +55,7 @@ export default function ActivityPage() {
       api
         .get<{ id: string }[]>("/workspaces")
         .then(async (ws) => {
-          const id = ws[0]?.id;
+          const id = pickWorkspace(ws as { id: string; name: string }[])?.id;
           if (!id) return;
           const log = await api.get<Entry[]>(`/workspaces/${id}/audit`);
           if (cancelled) return;

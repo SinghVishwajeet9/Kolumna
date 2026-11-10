@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageLoader } from "@/components/ui/Loader";
+import { currentWorkspace } from "@/lib/workspace";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { LogoMark } from "@/components/Logo";
@@ -28,8 +29,7 @@ const CARD_COLORS = [
 ];
 
 async function fetchBoards(): Promise<{ workspace: Workspace | null; boards: Board[] }> {
-  const workspaces = await api.get<Workspace[]>("/workspaces");
-  const workspace = workspaces[0] ?? null;
+  const workspace = await currentWorkspace<Workspace>();
   if (!workspace) return { workspace: null, boards: [] };
   return { workspace, boards: await api.get<Board[]>(`/workspaces/${workspace.id}/boards`) };
 }

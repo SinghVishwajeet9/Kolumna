@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageLoader } from "@/components/ui/Loader";
+import { currentWorkspace } from "@/lib/workspace";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Field } from "@/components/ui/Field";
@@ -79,7 +80,7 @@ async function fetchAgents(): Promise<{
   sprints: OpenSprint[];
   boards: BoardRef[];
 }> {
-  const workspace = (await api.get<Workspace[]>("/workspaces"))[0] ?? null;
+  const workspace = await currentWorkspace<Workspace>();
   if (!workspace) return { workspace: null, agents: [], sprints: [], boards: [] };
   const [agents, sprints, boards] = await Promise.all([
     api.get<Agent[]>(`/workspaces/${workspace.id}/agents`),

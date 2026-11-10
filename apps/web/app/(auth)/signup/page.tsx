@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { safeNext } from "@/lib/next-path";
 import { Logo } from "@/components/Logo";
 import { Field } from "@/components/ui/Field";
 import { CornerMarks } from "@/components/ui/CornerMarks";
 import { GooeyButton } from "@/components/marketing/GooeyButton";
 
+// useSearchParams needs a Suspense boundary for production builds.
 export default function SignupPage() {
-  const [email, setEmail] = useState("");
+  return (
+    <Suspense>
+      <Form />
+    </Suspense>
+  );
+}
+
+function Form() {
+  // ?next= brings you back where you came from (e.g. an invite link);
+  // ?email= pre-fills the address an invite was sent to.
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +36,9 @@ export default function SignupPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.push("/boards");
+      router.push(next);
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, next]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,7 +47,7 @@ export default function SignupPage() {
     try {
       await api.post("/auth/signup", { email, password, name });
       await refreshUser();
-      router.push("/boards");
+      router.push(next);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -124,7 +138,7 @@ export default function SignupPage() {
       <p className="mt-7 text-[14px] text-muted">
         Already have an account?{" "}
         <Link
-          href="/login"
+          href={params.toString() ? `/login?${params.toString()}` : "/login"}
           className="text-accent transition-opacity hover:opacity-80"
         >
           Sign in

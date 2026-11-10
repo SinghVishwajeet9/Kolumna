@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Trash } from "@phosphor-icons/react";
 import { PageLoader } from "@/components/ui/Loader";
 import { Select } from "@/components/ui/Select";
+import { currentWorkspace } from "@/lib/workspace";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
@@ -51,7 +52,7 @@ export default function UsagePage() {
 
   const load = useCallback(async () => {
     try {
-      const w = (await api.get<Workspace[]>("/workspaces"))[0];
+      const w = await currentWorkspace<Workspace>();
       if (!w) return;
       const [u, b, p, a, s] = await Promise.all([
         api.get<Usage>(`/workspaces/${w.id}/usage`),

@@ -9,6 +9,9 @@ import {
   Pulse,
   ListChecks,
   ChartLine,
+  UsersThree,
+  CaretUpDown,
+  Check,
   SealCheck,
   CurrencyDollar,
   SidebarSimple,
@@ -17,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { pickWorkspace, switchWorkspace } from "@/lib/workspace";
 
 const mono = { fontFamily: "var(--font-mono)" };
 const COLLAPSE_KEY = "kolumna:sidebar-collapsed";
@@ -111,6 +115,8 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const [boards, setBoards] = useState<Board[]>([]);
   const [activeAgents, setActiveAgents] = useState(0);
   const [pendingApprovals, setPendingApprovals] = useState(0);
@@ -150,7 +156,8 @@ export function Sidebar() {
     api
       .get<Workspace[]>("/workspaces")
       .then(async (ws) => {
-        const first = ws[0];
+        // The workspace the person picked (they can belong to several).
+        const first = pickWorkspace(ws);
         if (!first || cancelled) return;
         const [b, a, r, p] = await Promise.all([
           api.get<Board[]>(`/workspaces/${first.id}/boards`),
@@ -160,6 +167,7 @@ export function Sidebar() {
         ]);
         if (cancelled) return;
         setWorkspace(first);
+        setWorkspaces(ws);
         setBoards(b);
         setActiveAgents(a.filter((x) => x.status === "ACTIVE").length);
         setPendingApprovals(r.length + p.length);
@@ -226,7 +234,37 @@ export function Sidebar() {
               style={{ background: "radial-gradient(circle at 30% 30%, #b8ffe0, #5af7b3 45%, #1f7a55)" }}
               aria-hidden
             />
-            <span className="truncate text-[14px] font-medium text-fg">{workspace?.name ?? "Workspace"}</span>
+            <div className="relative min-w-0">
+              <button
+                type="button"
+                onClick={() => setSwitcherOpen((o) => !o)}
+                className="flex max-w-full items-center gap-1 text-[14px] font-medium text-fg"
+                title={workspaces.length > 1 ? "Switch workspace" : undefined}
+              >
+                <span className="truncate">{workspace?.name ?? "Workspace"}</span>
+                {workspaces.length > 1 && <CaretUpDown size={13} className="shrink-0 text-faint" />}
+              </button>
+              {switcherOpen && workspaces.length > 1 && (
+                <ul
+                  className="animate-rise absolute top-[calc(100%+8px)] left-0 z-20 w-[220px] bg-[#1c1c1e] p-1 shadow-[inset_0_0_0_1px_var(--color-line),0_16px_40px_-12px_rgba(0,0,0,0.9)]"
+                  style={{ borderRadius: 10 }}
+                >
+                  {workspaces.map((w) => (
+                    <li key={w.id}>
+                      <button
+                        type="button"
+                        onClick={() => (w.id === workspace?.id ? setSwitcherOpen(false) : switchWorkspace(w.id))}
+                        className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[13px] text-fg hover:bg-white/[0.06]"
+                        style={{ borderRadius: 7 }}
+                      >
+                        <span className="truncate">{w.name}</span>
+                        {w.id === workspace?.id && <Check size={13} className="ml-auto shrink-0" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <span
               className="shrink-0 px-2 py-0.5 text-[11px]"
               style={{ borderRadius: 999, backgroundColor: "rgba(90,247,179,0.12)", color: "#5af7b3", ...mono }}
@@ -265,6 +303,7 @@ export function Sidebar() {
           collapsed={collapsed}
           count={pendingApprovals}
         />
+        <NavItem href="/members" label="Members" icon={UsersThree} active={pathname.startsWith("/members")} collapsed={collapsed} />
         <NavItem href="/usage" label="Usage" icon={CurrencyDollar} active={pathname.startsWith("/usage")} collapsed={collapsed} />
         <NavItem href="/activity" label="Activity" icon={Pulse} active={pathname.startsWith("/activity")} collapsed={collapsed} />
 

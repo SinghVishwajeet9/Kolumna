@@ -84,6 +84,7 @@ model Workspace {
   modelPrices        ModelPrice[]
   usageBudgets       UsageBudget[]
   agentReliabilities AgentReliability[]
+  workspaceInvites   WorkspaceInvite[]
 }
 
 enum WorkspaceRole {
@@ -645,4 +646,27 @@ model AgentReliability {
 
   @@unique([agentId, sprintId])
   @@index([workspaceId])
+}
+
+// An invitation to join a workspace. The link carries a random token; only
+// its SHA-256 hash is stored (same pattern as sessions and agent secrets),
+// so a leaked database can't be turned into working invite links. One use,
+// expires after 7 days, bound to the invited email address.
+model WorkspaceInvite {
+  id                String        @id @default(cuid())
+  workspaceId       String
+  email             String // lower-cased; only this address can accept
+  role              WorkspaceRole @default(MEMBER) // ADMIN or MEMBER — ownership isn't handed out by link
+  tokenHash         String        @unique
+  invitedByActorId  String
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  acceptedByActorId String?
+  revokedAt         DateTime?
+  createdAt         DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
 }
