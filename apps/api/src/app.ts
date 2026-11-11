@@ -66,3 +66,8 @@ app.use(mcpRoutes);
 
 // Must be registered LAST — after every route — see errorHandler.ts.
 app.use(errorHandler);
+
+// Hosting on Vercel: Vercel finds the file that default-exports the Express
+// app and runs it as one serverless function (index.ts's listen() is for
+// running it as a normal server, locally or elsewhere).
+export default app;
