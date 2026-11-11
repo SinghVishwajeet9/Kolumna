@@ -4,8 +4,8 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
   previewFeatures = ["relationJoins"]
 }
 
@@ -60,6 +60,19 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// One row per failed login, keyed by the (lowercased) email that was tried —
+// whether or not that account exists. 5 failures within 15 minutes lock that
+// email until the window passes (lib/loginThrottle.ts, roadmap G10). Kept in
+// the database, not memory: the free API host restarts whenever it sleeps.
+model LoginFailure {
+  id        String   @id @default(cuid())
+  email     String
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([createdAt]) // pruning old rows
 }
 
 model Workspace {

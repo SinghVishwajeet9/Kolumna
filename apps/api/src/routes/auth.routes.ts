@@ -11,6 +11,8 @@ import {
   SESSION_COOKIE_NAME,
 } from "../lib/session.js";
 import argon2 from "argon2";
+import { asyncHandler } from "../lib/asyncHandler.js";
+import { clearFailures, lockedForMs, recordFailure } from "../lib/loginThrottle.js";
 
 const router = Router();
 
@@ -20,7 +22,7 @@ const signupSchema = z.object({
   name: z.string().min(1),
 });
 
-router.post("/signup", async (req, res) => {
+router.post("/signup", asyncHandler(async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
@@ -72,9 +74,9 @@ router.post("/signup", async (req, res) => {
     message: "User created successfully",
     user: { id: user.id, email: user.email, name: user.name },
   });
-});
+}));
 
-router.post("/login", async (req, res) => {
+router.post("/login", asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const parsed = z
     .object({ email: z.string().email(), password: z.string() })
@@ -82,10 +84,24 @@ router.post("/login", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
   }
-  const user = await prisma.user.findUnique({ where: { email } });
+  // Too many recent failures for this email? Refuse before checking the
+  // password at all (G10, lib/loginThrottle.ts).
+  const [waitMs, user] = await Promise.all([
+    lockedForMs(email),
+    prisma.user.findUnique({ where: { email } }),
+  ]);
+  if (waitMs > 0) {
+    const minutes = Math.ceil(waitMs / 60_000);
+    res.setHeader("Retry-After", String(Math.ceil(waitMs / 1000)));
+    return res.status(429).json({
+      error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+    });
+  }
   if (!user || !(await argon2.verify(user.hashedPassword, password))) {
+    await recordFailure(email);
     return res.status(401).json({ error: "Invalid email or password" });
   }
+  await clearFailures(email);
 
   const token = generateSessionToken();
   const session = await createSession(token, user.id);
@@ -95,9 +111,9 @@ router.post("/login", async (req, res) => {
     message: "Login successful",
     user: { id: user.id, email: user.email, name: user.name },
   });
-});
+}));
 
-router.post("/logout", async (req, res) => {
+router.post("/logout", asyncHandler(async (req, res) => {
   const token = req.cookies[SESSION_COOKIE_NAME];
 
   if (!token) {
@@ -108,9 +124,9 @@ router.post("/logout", async (req, res) => {
   clearSessionCookie(res);
 
   res.status(200).json({ message: "Logged out" });
-});
+}));
 
-router.get("/me", async (req, res) => {
+router.get("/me", asyncHandler(async (req, res) => {
   const token = req.cookies[SESSION_COOKIE_NAME];
 
   if (!token) {
@@ -125,6 +141,6 @@ router.get("/me", async (req, res) => {
   res.status(200).json({
     user: { id: user.id, email: user.email, name: user.name },
   });
-});
+}));
 
 export default router;
