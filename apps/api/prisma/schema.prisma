@@ -7,6 +7,10 @@ generator client {
   provider        = "prisma-client"
   output          = "../src/generated/prisma"
   previewFeatures = ["relationJoins"]
+  // Plain Node (as on Vercel) needs full file names in ESM imports; without
+  // this the generated client imports "./internal/class" and crashes there.
+  // tsx filled the gap locally, which is why it only failed once deployed.
+  importFileExtension = "js"
 }
 
 datasource db {
