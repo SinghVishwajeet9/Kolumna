@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-// Intro overlay. Sequence (~5.8s, every visit):
+// Intro overlay, played once per browser session (sessionStorage), so going
+// to Sign in and back doesn't replay it. Sequence (~5.8s):
 //   1. "LOADING" types out char-by-char (caps, Departure Mono, blinking caret).
 //   2. Product vocabulary fades in across the whole screen one by one — big,
 //      varied sizes, white, slow and smooth.
@@ -18,6 +19,23 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 type Phase = "loading" | "scatter" | "chaos" | "fadeWords" | "reveal" | "done";
 
 const LABEL = "LOADING";
+const SEEN_KEY = "kolumna:intro-seen";
+
+// Storage can throw (private windows, blocked site data): then just play it.
+function alreadySeen(): boolean {
+  try {
+    return sessionStorage.getItem(SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markSeen() {
+  try {
+    sessionStorage.setItem(SEEN_KEY, "1");
+  } catch {
+    /* fine: it'll just play again next time */
+  }
+}
 const TYPE_SPEED = 150; // ms per character
 
 // Timeline (ms from mount). Deliberately unhurried.
@@ -80,6 +98,10 @@ export function LoadingScreen() {
   const [box, setBox] = useState<ChaosBox | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const prevBody = useRef<{ overflow: string; paddingRight: string } | null>(null);
+  // Decided once per mount. React dev mode runs effects twice on purpose;
+  // checking storage on the second run would see our own "seen" mark and
+  // skip the intro on a genuine first visit.
+  const skip = useRef<boolean | null>(null);
 
   const restoreBody = () => {
     const prev = prevBody.current;
@@ -91,8 +113,14 @@ export function LoadingScreen() {
   useLayoutEffect(() => {
     // Motion-sensitive users skip the whole thing — useLayoutEffect runs
     // before paint, so the overlay is never actually shown to them.
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
+    // Same for anyone who's already seen it this session.
+    if (skip.current === null) {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      skip.current = reduce || alreadySeen();
+      // Marked at the START, so leaving mid-animation doesn't replay it either.
+      if (!skip.current) markSeen();
+    }
+    if (skip.current) {
       setPhase("done");
       return;
     }
