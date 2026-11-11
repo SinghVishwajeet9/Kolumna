@@ -1,0 +1,35 @@
+# Render "Blueprint": describes the API service so it can be created from the
+# repo in one step (Render dashboard -> New -> Blueprint -> pick this repo).
+# Secrets (DATABASE_URL, URLs) are marked sync: false: Render asks for them
+# on creation and they never live in git.
+
+services:
+  - type: web
+    name: kolumna-api
+    runtime: node
+    plan: free
+    region: singapore # next to the Neon database (ap-southeast-1)
+    rootDir: .
+    # Install the whole workspace (the API imports packages/shared), generate
+    # the Prisma client, then apply pending migrations. Free plans have no
+    # "pre-deploy command", so migrations run as part of the build: a failed
+    # migration fails the deploy and the previous version keeps serving.
+    buildCommand: >-
+      npm install -g bun &&
+      bun install --frozen-lockfile &&
+      cd apps/api &&
+      bunx prisma generate &&
+      bunx prisma migrate deploy
+    startCommand: cd apps/api && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production # makes the session cookie Secure (HTTPS-only)
+      - key: DATABASE_URL
+        sync: false # the Neon connection string
+      - key: CORS_ORIGIN
+        sync: false # https://<your-app>.vercel.app
+      - key: WEB_URL
+        sync: false # same as CORS_ORIGIN; invite links point here

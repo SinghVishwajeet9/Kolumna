@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
-const MCP_URL = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100"}/mcp`;
+// Agents connect straight to the API, never through the web app's /api
+// pass-through. When the browser uses /api, set NEXT_PUBLIC_MCP_URL to the
+// API's real address (https://<api-host>/mcp).
+const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100"}/mcp`;
 const mono = { fontFamily: "var(--font-mono)" };
 
 export const CLIENTS = [

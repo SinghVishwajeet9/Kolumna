@@ -18,5 +18,7 @@ export const env = {
   // Where links we hand out (invites) should point: the web app.
   webUrl: process.env.WEB_URL ?? process.env.CORS_ORIGIN ?? "http://localhost:3000",
   databaseUrl: required("DATABASE_URL"),
-  redisUrl: required("REDIS_URL"),
+  // Only the optional agent-run worker (worker.ts) uses Redis; the API itself
+  // doesn't, so hosting it without Redis is fine.
+  redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
 };
