@@ -49,3 +49,5 @@ prisma/*.db
 **/.agents/
 **/.claude/skills/
 **/.windsurf/
+# Claude Code local settings (kept on this machine, not in the repo)
+.claude/
