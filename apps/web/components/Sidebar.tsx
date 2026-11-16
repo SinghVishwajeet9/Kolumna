@@ -17,6 +17,8 @@ import {
   SidebarSimple,
   SignOut,
   type Icon,
+  List,
+  X,
 } from "@phosphor-icons/react";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -113,7 +115,19 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedPref, setCollapsed] = useState(false);
+  // Phones: the sidebar is a drawer that slides in over the page, opened from
+  // a top bar. It's never the narrow icon-only version there.
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  const collapsed = collapsedPref && !isMobile;
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -212,6 +226,11 @@ export function Sidebar() {
     }
   }, [pathname, boards.length, collapsed, planningBoard?.id]);
 
+  // Going to another page closes the drawer.
+  useEffect(() => {
+    queueMicrotask(() => setMobileOpen(false));
+  }, [pathname]);
+
   const initials = (user?.name ?? "?")
     .split(/\s+/)
     .map((p) => p[0])
@@ -220,10 +239,42 @@ export function Sidebar() {
     .toUpperCase();
 
   return (
+    <>
+      {/* Phones only: a top bar with the menu button. */}
+      <div className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-3 border-b border-line bg-surface px-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          aria-expanded={mobileOpen}
+          className="flex h-9 w-9 items-center justify-center text-fg hover:bg-white/[0.06]"
+          style={{ borderRadius: 8 }}
+        >
+          <List size={20} />
+        </button>
+        <span className="truncate text-[14px] font-medium text-fg">{workspace?.name ?? "Kolumna"}</span>
+        {pendingApprovals > 0 && (
+          <Link
+            href="/approvals"
+            className="ml-auto flex h-7 items-center gap-1.5 px-2.5 text-[12px] text-fg"
+            style={{ borderRadius: 999, backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#e9b949]" />
+            {pendingApprovals} to approve
+          </Link>
+        )}
+      </div>
+      {mobileOpen && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:h-dvh max-md:w-[272px] max-md:transition-transform ${
         collapsed ? "w-[64px]" : "w-[248px]"
-      }`}
+      } ${mobileOpen ? "" : "max-md:-translate-x-full"}`}
     >
       {/* Workspace */}
       <div className={`flex h-[60px] items-center gap-2.5 border-b border-line ${collapsed ? "justify-center px-2" : "px-4"}`}>
@@ -267,7 +318,8 @@ export function Sidebar() {
             </div>
             <span
               className="shrink-0 px-2 py-0.5 text-[11px]"
-              style={{ borderRadius: 999, backgroundColor: "rgba(90,247,179,0.12)", color: "#5af7b3", ...mono }}
+              // Neutral chip, like every other chip in the app.
+              style={{ borderRadius: 999, backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#d0d6e0" }}
             >
               free
             </span>
@@ -275,11 +327,12 @@ export function Sidebar() {
         )}
         <button
           type="button"
-          onClick={toggle}
+          onClick={isMobile ? () => setMobileOpen(false) : toggle}
           className={`text-faint transition-colors hover:text-fg ${collapsed ? "" : "ml-auto"}`}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={isMobile ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={isMobile ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <SidebarSimple size={18} />
+          {isMobile ? <X size={18} /> : <SidebarSimple size={18} />}
         </button>
       </div>
 
@@ -384,5 +437,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

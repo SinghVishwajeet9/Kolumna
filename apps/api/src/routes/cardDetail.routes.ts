@@ -8,7 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireWorkspaceMember } from "../middleware/requireWorkspaceMember.js";
 import { appendAuditEntry, getLineageForTarget, AUDIT_TX_OPTIONS } from "../lib/audit.js";
-import { NotFoundError, ValidationError } from "../lib/errors.js";
+import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors.js";
 import { findCardAnyWorkspace } from "../repositories/card.repo.js";
 
 const router = Router();
@@ -137,35 +137,144 @@ router.post("/cards/:cardId/checklist", requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch("/checklist-items/:itemId", requireAuth, async (req, res, next) => {
+// A comment the caller can see: it's in a workspace they belong to. `role` is
+// their role there, for the delete rule below.
+async function requireComment(actorId: string, commentId: string) {
+  const comment = await prisma.comment.findFirst({
+    where: { id: commentId, workspace: { members: { some: { actorId } } } },
+  });
+  if (!comment) throw new NotFoundError("Comment not found");
+  const membership = await prisma.membership.findFirst({
+    where: { workspaceId: comment.workspaceId, actorId },
+    select: { role: true },
+  });
+  return { comment, role: membership?.role ?? "MEMBER" };
+}
+
+// Only the author can change what a comment says: nobody edits words into
+// someone else's mouth, an agent's included.
+router.patch("/comments/:commentId", requireAuth, async (req, res, next) => {
   try {
-    const parsed = z.object({ done: z.boolean() }).safeParse(req.body);
+    const parsed = z.object({ body: z.string().trim().min(1).max(4000) }).safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.message);
     const actorId = req.user!.actorId;
-    const item = await prisma.checklistItem.findFirst({
-      where: { id: req.params.itemId!, workspace: { members: { some: { actorId } } } },
-    });
-    if (!item) throw new NotFoundError("Checklist item not found");
+    const { comment } = await requireComment(actorId, req.params.commentId!);
+    if (comment.authorActorId !== actorId) throw new ForbiddenError("Only the author can edit a comment");
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const c = await tx.comment.update({
+        where: { id: comment.id },
+        data: { body: parsed.data.body, editedAt: new Date() },
+        include: { author: { select: { id: true, displayName: true, type: true } } },
+      });
+      await appendAuditEntry(tx, {
+        workspaceId: comment.workspaceId,
+        actorId,
+        action: "CARD.COMMENT_EDIT",
+        targetType: "Card",
+        targetId: comment.cardId,
+        result: "SUCCESS",
+        resource: comment.id,
+      });
+      return c;
+    }, AUDIT_TX_OPTIONS);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The author can delete their own comment; an owner or admin can delete
+// anyone's (including an agent's). The audit entry stays either way.
+router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
+  try {
+    const actorId = req.user!.actorId;
+    const { comment, role } = await requireComment(actorId, req.params.commentId!);
+    const mine = comment.authorActorId === actorId;
+    if (!mine && role === "MEMBER") throw new ForbiddenError("Only the author or an admin can delete a comment");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.comment.delete({ where: { id: comment.id } });
+      await appendAuditEntry(tx, {
+        workspaceId: comment.workspaceId,
+        actorId,
+        action: "CARD.COMMENT_DELETE",
+        targetType: "Card",
+        targetId: comment.cardId,
+        result: "SUCCESS",
+        resource: mine ? comment.id : `${comment.id} author=${comment.authorActorId}`,
+      });
+    }, AUDIT_TX_OPTIONS);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function requireChecklistItem(actorId: string, itemId: string) {
+  const item = await prisma.checklistItem.findFirst({
+    where: { id: itemId, workspace: { members: { some: { actorId } } } },
+  });
+  if (!item) throw new NotFoundError("Checklist item not found");
+  return item;
+}
+
+// Tick or untick a step, reword it, or both.
+router.patch("/checklist-items/:itemId", requireAuth, async (req, res, next) => {
+  try {
+    const parsed = z
+      .object({ done: z.boolean().optional(), title: z.string().trim().min(1).max(200).optional() })
+      .refine((d) => d.done !== undefined || d.title !== undefined, "Send done, title, or both")
+      .safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.message);
+    const actorId = req.user!.actorId;
+    const item = await requireChecklistItem(actorId, req.params.itemId!);
+    const { done, title } = parsed.data;
 
     const updated = await prisma.$transaction(async (tx) => {
       const u = await tx.checklistItem.update({
         where: { id: item.id },
-        data: parsed.data.done
-          ? { done: true, doneAt: new Date(), doneByActorId: actorId }
-          : { done: false, doneAt: null, doneByActorId: null, evidenceUrl: null },
+        data: {
+          ...(title !== undefined ? { title } : {}),
+          ...(done === undefined
+            ? {}
+            : done
+              ? { done: true, doneAt: new Date(), doneByActorId: actorId }
+              : { done: false, doneAt: null, doneByActorId: null, evidenceUrl: null }),
+        },
       });
-      await appendAuditEntry(tx, {
-        workspaceId: item.workspaceId,
-        actorId,
-        action: parsed.data.done ? "CHECKLIST.TICK" : "CHECKLIST.UNTICK",
-        targetType: "Card",
-        targetId: item.cardId,
-        result: "SUCCESS",
-        resource: item.id,
-      });
+      const entry = { workspaceId: item.workspaceId, actorId, targetType: "Card", targetId: item.cardId, result: "SUCCESS" } as const;
+      if (done !== undefined) {
+        await appendAuditEntry(tx, { ...entry, action: done ? "CHECKLIST.TICK" : "CHECKLIST.UNTICK", resource: item.id });
+      }
+      if (title !== undefined && title !== item.title) {
+        await appendAuditEntry(tx, { ...entry, action: "CHECKLIST.RENAME", resource: item.id });
+      }
       return u;
     }, AUDIT_TX_OPTIONS);
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/checklist-items/:itemId", requireAuth, async (req, res, next) => {
+  try {
+    const actorId = req.user!.actorId;
+    const item = await requireChecklistItem(actorId, req.params.itemId!);
+    await prisma.$transaction(async (tx) => {
+      await tx.checklistItem.delete({ where: { id: item.id } });
+      await appendAuditEntry(tx, {
+        workspaceId: item.workspaceId,
+        actorId,
+        action: "CHECKLIST.REMOVE",
+        targetType: "Card",
+        targetId: item.cardId,
+        result: "SUCCESS",
+        resource: `${item.id} "${item.title}"`,
+      });
+    }, AUDIT_TX_OPTIONS);
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

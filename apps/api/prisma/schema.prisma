@@ -352,6 +352,7 @@ model Comment {
   authorActorId String
   body          String
   createdAt     DateTime @default(now())
+  editedAt      DateTime? // set when the author edits the body
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   card      Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)

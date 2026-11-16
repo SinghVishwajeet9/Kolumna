@@ -79,6 +79,8 @@ export type Member = {
   name: string;
   type: "HUMAN" | "AGENT";
   agentStatus: string | null;
+  role?: "OWNER" | "ADMIN" | "MEMBER";
+  email?: string | null; // people only
 };
 
 export type ChecklistItem = {
@@ -118,7 +120,7 @@ export type CardDetails = {
   list: { id: string; title: string; boardId: string };
   assignee: ActorRef | null;
   checklistItems: ChecklistItem[];
-  comments: { id: string; body: string; createdAt: string; author: ActorRef }[];
+  comments: { id: string; body: string; createdAt: string; editedAt: string | null; author: ActorRef }[];
   subtaskProposals: {
     id: string;
     subtasks: { title: string }[];

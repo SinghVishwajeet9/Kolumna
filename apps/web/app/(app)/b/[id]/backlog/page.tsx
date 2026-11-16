@@ -13,12 +13,13 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { CaretRight, Lightning, Plus } from "@phosphor-icons/react";
+import { CaretRight, Lightning, PencilSimple, Plus } from "@phosphor-icons/react";
 import { PageLoader } from "@/components/ui/Loader";
 import { Select } from "@/components/ui/Select";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { CardPanel } from "@/components/board/CardPanel";
+import { ActionMenu } from "@/components/ui/Menu";
 import { Avatar } from "@/components/board/Avatar";
 import { CardKey, EpicChip, PointsChip, PriorityIcon } from "@/components/board/Planning";
 import type { Backlog, BacklogCard, BacklogSprint, Epic, Member } from "@/components/board/types";
@@ -49,6 +50,7 @@ export default function BacklogPage() {
   const [dragCard, setDragCard] = useState<BacklogCard | null>(null);
   const [starting, setStarting] = useState<BacklogSprint | null>(null);
   const [completing, setCompleting] = useState<BacklogSprint | null>(null);
+  const [editingSprint, setEditingSprint] = useState<BacklogSprint | null>(null);
   const dragging = useRef(false);
 
   const load = useCallback(async () => {
@@ -206,7 +208,12 @@ export default function BacklogPage() {
                 cards={s.cards}
                 costUsd={s.costUsd}
                 actions={
-                  s.status === "ACTIVE" ? (
+                  <>
+                    <ActionMenu
+                      label={`Actions for ${s.name}`}
+                      items={[{ label: "Edit sprint", icon: <PencilSimple size={14} />, onSelect: () => setEditingSprint(s) }]}
+                    />
+                    {s.status === "ACTIVE" ? (
                     <SectionButton onClick={() => setCompleting(s)}>Complete sprint</SectionButton>
                   ) : (
                     <SectionButton
@@ -222,7 +229,8 @@ export default function BacklogPage() {
                     >
                       Start sprint
                     </SectionButton>
-                  )
+                  )}
+                  </>
                 }
               >
                 <Rows
@@ -269,6 +277,19 @@ export default function BacklogPage() {
             act(async () => {
               await api.post(`/sprints/${starting.id}/start`, body);
               setStarting(null);
+            })
+          }
+        />
+      )}
+
+      {editingSprint && (
+        <EditSprintDialog
+          sprint={fresh(editingSprint)}
+          onClose={() => setEditingSprint(null)}
+          onSave={(body) =>
+            act(async () => {
+              await api.patch(`/sprints/${editingSprint.id}`, body);
+              setEditingSprint(null);
             })
           }
         />
@@ -327,7 +348,7 @@ function Section({
       className="bg-[#1a1a1c] p-1.5 transition-shadow"
       style={{ borderRadius: 12, boxShadow: isOver ? "inset 0 0 0 1px rgba(255,255,255,0.35)" : "none" }}
     >
-      <header className="flex items-center gap-3 px-2.5 py-2">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-2.5 py-2">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -341,7 +362,7 @@ function Section({
           {points(cards) > 0 && ` · ${points(cards)} pts`}
           {costUsd && Number(costUsd) > 0 && ` · $${costUsd} agent cost`}
         </span>
-        <span className="ml-auto">{actions}</span>
+        <span className="ml-auto flex items-center gap-1.5">{actions}</span>
       </header>
       {subtitle && open && <p className="px-2.5 pb-2 pl-[30px] text-[13px] text-faint">{subtitle}</p>}
       {open && <div className="flex flex-col gap-[2px]">{children}</div>}
@@ -673,6 +694,90 @@ function StartDialog({
             ...(hours && Number(hours) >= 0 ? { humanCapacityHours: Number(hours) } : {}),
             endsAt: new Date(Date.now() + Number(weeks) * 7 * 86_400_000).toISOString(),
           })
+        }
+      />
+    </Dialog>
+  );
+}
+
+const fieldClass =
+  "w-full bg-surface-2 px-3 py-2 text-[14px] text-fg shadow-[inset_0_0_0_1px_var(--color-line)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]";
+
+/** Rename a sprint, change its goal, or (once it has started) move its end date. */
+function EditSprintDialog({
+  sprint,
+  onClose,
+  onSave,
+}: {
+  sprint: BacklogSprint;
+  onClose: () => void;
+  onSave: (body: { name: string; goal: string | null; endsAt?: string }) => Promise<unknown>;
+}) {
+  const [name, setName] = useState(sprint.name);
+  const [goal, setGoal] = useState(sprint.goal ?? "");
+  // <input type="date"> works in local yyyy-mm-dd.
+  const toInput = (iso: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [ends, setEnds] = useState(toInput(sprint.endsAt));
+  const started = sprint.status !== "PLANNED";
+  return (
+    <Dialog title="Edit sprint" onClose={onClose}>
+      <label className="mb-1.5 block text-[13px] text-faint" htmlFor="sprint-name">
+        Name
+      </label>
+      <input
+        id="sprint-name"
+        autoFocus
+        value={name}
+        maxLength={80}
+        onChange={(e) => setName(e.target.value)}
+        className={fieldClass}
+        style={{ borderRadius: 8 }}
+      />
+      <label className="mt-4 mb-1.5 block text-[13px] text-faint" htmlFor="sprint-goal">
+        Sprint goal
+      </label>
+      <input
+        id="sprint-goal"
+        value={goal}
+        maxLength={500}
+        onChange={(e) => setGoal(e.target.value)}
+        placeholder="What this sprint is for"
+        className={fieldClass}
+        style={{ borderRadius: 8 }}
+      />
+      {started && (
+        <>
+          <label className="mt-4 mb-1.5 block text-[13px] text-faint" htmlFor="sprint-ends">
+            Ends on
+          </label>
+          <input
+            id="sprint-ends"
+            type="date"
+            value={ends}
+            onChange={(e) => setEnds(e.target.value)}
+            className={`${fieldClass} [color-scheme:dark]`}
+            style={{ borderRadius: 8 }}
+          />
+        </>
+      )}
+      <DialogActions
+        onClose={onClose}
+        label="Save"
+        onConfirm={() =>
+          name.trim()
+            ? onSave({
+                name: name.trim(),
+                goal: goal.trim() || null,
+                // End of the chosen day, local time.
+                ...(started && ends && ends !== toInput(sprint.endsAt)
+                  ? { endsAt: new Date(`${ends}T23:59:59`).toISOString() }
+                  : {}),
+              })
+            : Promise.resolve()
         }
       />
     </Dialog>

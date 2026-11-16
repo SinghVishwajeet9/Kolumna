@@ -15,14 +15,17 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { Plus, Lightning, ListChecks, ChartLine } from "@phosphor-icons/react";
+import { Plus, Lightning, ListChecks, ChartLine, PencilSimple, Trash } from "@phosphor-icons/react";
+import { ActionMenu, ConfirmDialog, InlineEdit } from "@/components/ui/Menu";
+import { refreshSidebar } from "@/components/Sidebar";
+import { AmbientBackground, AmbientPicker } from "@/components/AmbientBackground";
 import { PageLoader } from "@/components/ui/Loader";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Column } from "@/components/board/Column";
 import { CardTile } from "@/components/board/CardTile";
 import { CardPanel } from "@/components/board/CardPanel";
-import type { Board, BoardCard, Member } from "@/components/board/types";
+import type { Board, BoardCard, BoardList, Member } from "@/components/board/types";
 import { daysLeft } from "@/components/board/types";
 
 const mono = { fontFamily: "var(--font-mono)" };
@@ -40,6 +43,9 @@ export default function BoardPage() {
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [columnTitle, setColumnTitle] = useState("");
+  const [renamingBoard, setRenamingBoard] = useState(false);
+  const [deletingBoard, setDeletingBoard] = useState(false);
+  const [deletingList, setDeletingList] = useState<BoardList | null>(null);
 
   // Polling must never overwrite the board mid-drag, or the card would jump
   // back under the user's cursor.
@@ -210,39 +216,106 @@ export default function BoardPage() {
     await load();
   }
 
+  // Renames show at once and are put right by the next refresh if saving failed.
+  async function renameColumn(listId: string, title: string) {
+    setBoard((b) => b && { ...b, lists: b.lists.map((l) => (l.id === listId ? { ...l, title } : l)) });
+    try {
+      await api.patch(`/lists/${listId}`, { title });
+    } catch {
+      setError("Couldn't rename that column.");
+    }
+    await load();
+  }
+
+  async function renameBoard(title: string) {
+    setBoard((b) => b && { ...b, title });
+    try {
+      await api.patch(`/boards/${boardId}`, { title });
+      refreshSidebar();
+    } catch {
+      setError("Couldn't rename this board.");
+    }
+    await load();
+  }
+
+  const failed = (what: string) => (err: unknown) => {
+    throw new Error(err instanceof ApiError ? err.message : `Couldn't delete ${what}. Try again.`);
+  };
+
   return (
-    <main className="min-h-screen bg-bg">
-      <div className="px-6 pt-10 pb-6 lg:px-10">
-        <Link href="/boards" className="text-[13px] text-faint hover:text-fg" style={mono}>
-          ← boards
-        </Link>
-        <div className="mt-3 flex items-end justify-between gap-4">
+    <main className="relative min-h-screen bg-bg">
+      <AmbientBackground strength="soft" />
+      <div className="relative z-20 px-5 pb-5 pt-8 sm:px-8 sm:pt-10 lg:px-10">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-faint">
+          <Link href="/boards" className="transition-colors hover:text-fg">
+            Boards
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="truncate text-muted">{board?.title ?? "…"}</span>
+        </nav>
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-4">
           <div className="min-w-0">
-            <h1 className="flex items-baseline gap-3 text-[clamp(1.6rem,3vw,2.4rem)] font-medium tracking-[-0.02em]" style={mono}>
-              {board?.title ?? " "}
-              {board && <span className="text-[14px] font-normal tracking-normal text-faint">{board.key}</span>}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1
+                className="flex min-w-0 items-center gap-2.5 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-fg"
+                onDoubleClick={() => board && setRenamingBoard(true)}
+              >
+                {board ? (
+                  <InlineEdit
+                    value={board.title}
+                    editing={renamingBoard}
+                    onDone={() => setRenamingBoard(false)}
+                    onSave={(t) => void renameBoard(t)}
+                    maxLength={80}
+                    ariaLabel="Board name"
+                    className="min-w-0 truncate"
+                    inputClassName="font-semibold tracking-[-0.02em]"
+                  />
+                ) : (
+                  " "
+                )}
+                {board && !renamingBoard && (
+                  <span
+                    className="shrink-0 px-1.5 py-[2px] text-[11.5px] font-normal tracking-normal text-[#d0d6e0]"
+                    style={{ borderRadius: 5, backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  >
+                    {board.key}
+                  </span>
+                )}
+              </h1>
+              {board && !renamingBoard && (
+                <ActionMenu
+                  label="Board actions"
+                  align="left"
+                  items={[
+                    { label: "Rename board", icon: <PencilSimple size={14} />, onSelect: () => setRenamingBoard(true) },
+                    { label: "Delete board", icon: <Trash size={14} />, danger: true, onSelect: () => setDeletingBoard(true) },
+                  ]}
+                />
+              )}
+            </div>
             {board && <SprintLine board={board} />}
           </div>
-          <div className="flex shrink-0 items-center gap-5">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <span className="mr-1 flex items-center gap-1.5 text-[12px] text-faint" title="Updates every few seconds">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+              Live
+            </span>
             <Link
               href={`/b/${boardId}/backlog`}
-              className="flex items-center gap-1.5 text-[13px] text-faint transition-colors hover:text-fg"
-              style={mono}
+              className="glass pressable flex h-9 items-center gap-1.5 px-3 text-[13px] text-muted hover:text-fg"
+              style={{ borderRadius: 9 }}
             >
-              <ListChecks size={15} /> backlog
+              <ListChecks size={15} /> Backlog
             </Link>
             <Link
               href={`/b/${boardId}/reports`}
-              className="flex items-center gap-1.5 text-[13px] text-faint transition-colors hover:text-fg"
-              style={mono}
+              className="glass pressable flex h-9 items-center gap-1.5 px-3 text-[13px] text-muted hover:text-fg"
+              style={{ borderRadius: 9 }}
             >
-              <ChartLine size={15} /> reports
+              <ChartLine size={15} /> Reports
             </Link>
-            <span className="flex items-center gap-2 text-[12px] text-faint" style={mono}>
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-              live
-            </span>
+            <AmbientPicker />
           </div>
         </div>
         {error && <p className="mt-3 text-[13px] text-[#fca5a5]">{error}</p>}
@@ -263,12 +336,22 @@ export default function BoardPage() {
             void load();
           }}
         >
-          <div className="flex items-start gap-3 overflow-x-auto px-6 pb-10 lg:px-10">
-            {board.lists.map((list) => (
-              <Column key={list.id} list={list} boardKey={board.key} onOpenCard={setOpenCardId} onAddCard={addCard} />
+          {/* min-height: room for a column's menu to open even when every column is empty. */}
+          <div className="relative z-10 flex min-h-[calc(100vh-240px)] items-start gap-3 overflow-x-auto px-5 pb-10 pt-1 sm:px-8 lg:px-10">
+            {board.lists.map((list, i) => (
+              <Column
+                key={list.id}
+                index={i}
+                list={list}
+                boardKey={board.key}
+                onOpenCard={setOpenCardId}
+                onAddCard={addCard}
+                onRename={(id, t) => void renameColumn(id, t)}
+                onDelete={setDeletingList}
+              />
             ))}
 
-            <div className="w-[280px] shrink-0">
+            <div className="w-[288px] shrink-0">
               {addingColumn ? (
                 <form onSubmit={addColumn}>
                   <input
@@ -277,16 +360,16 @@ export default function BoardPage() {
                     onChange={(e) => setColumnTitle(e.target.value)}
                     onBlur={() => !columnTitle && setAddingColumn(false)}
                     placeholder="Column name — Enter to add"
-                    className="w-full bg-[#1a1a1c] px-3 py-2.5 text-[14px] text-fg shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] outline-none placeholder:text-faint focus:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]"
-                    style={{ borderRadius: 12 }}
+                    className="glass w-full px-3 py-2.5 text-[14px] text-fg outline-none placeholder:text-faint focus:border-white/40"
+                    style={{ borderRadius: 14 }}
                   />
                 </form>
               ) : (
                 <button
                   type="button"
                   onClick={() => setAddingColumn(true)}
-                  className="flex h-10 w-full items-center gap-2 border border-dashed border-line-bright/70 px-3 text-[13px] text-faint transition-colors hover:border-white/40 hover:text-fg"
-                  style={{ borderRadius: 12 }}
+                  className="pressable flex h-11 w-full items-center gap-2 border border-dashed border-white/[0.14] bg-[rgba(13,13,13,0.5)] px-3.5 text-[13px] text-faint backdrop-blur-[10px] hover:border-white/30 hover:bg-[rgba(30,30,33,0.55)] hover:text-fg"
+                  style={{ borderRadius: 14 }}
                 >
                   <Plus size={14} /> Add column
                 </button>
@@ -306,6 +389,35 @@ export default function BoardPage() {
           onChanged={() => void load()}
         />
       )}
+
+      {deletingList && (
+        <ConfirmDialog
+          title={`Delete "${deletingList.title}"?`}
+          body={
+            deletingList.cards.length
+              ? `This also deletes the ${deletingList.cards.length} ${deletingList.cards.length === 1 ? "task" : "tasks"} in it. This can't be undone.`
+              : "The column is empty. This can't be undone."
+          }
+          confirmLabel="Delete column"
+          onClose={() => setDeletingList(null)}
+          onConfirm={() => api.delete(`/lists/${deletingList.id}`).then(load, failed("that column"))}
+        />
+      )}
+
+      {deletingBoard && board && (
+        <ConfirmDialog
+          title={`Delete "${board.title}"?`}
+          body="This deletes the board with all its columns, tasks, sprints and epics. This can't be undone."
+          confirmLabel="Delete board"
+          onClose={() => setDeletingBoard(false)}
+          onConfirm={() =>
+            api.delete(`/boards/${boardId}`).then(() => {
+              refreshSidebar();
+              router.push("/boards");
+            }, failed("this board"))
+          }
+        />
+      )}
     </main>
   );
 }
@@ -317,7 +429,7 @@ function SprintLine({ board }: { board: Board }) {
   if (!s) {
     return (
       <p className="mt-2 text-[13px] text-faint">
-        No sprint running — showing every card.{" "}
+        No sprint running, so every task is shown.{" "}
         <Link href={`/b/${board.id}/backlog`} className="text-muted underline-offset-4 hover:text-fg hover:underline">
           Plan one
         </Link>

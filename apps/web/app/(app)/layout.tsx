@@ -7,7 +7,8 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="app-ui flex min-h-screen bg-bg">
       <Sidebar />
-      <div className="min-w-0 flex-1">{children}</div>
+      {/* Phones: leave room for the fixed top bar (see Sidebar). */}
+      <div className="min-w-0 flex-1 max-md:pt-[52px]">{children}</div>
     </div>
   );
 }

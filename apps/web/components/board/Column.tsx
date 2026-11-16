@@ -3,23 +3,33 @@
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus, ArrowElbowDownLeft } from "@phosphor-icons/react";
+import { Plus, ArrowElbowDownLeft, PencilSimple, Trash } from "@phosphor-icons/react";
 import type { BoardList } from "./types";
 import { CardTile } from "./CardTile";
+import { ActionMenu, InlineEdit } from "@/components/ui/Menu";
 
 export function Column({
   list,
   boardKey,
+  index = 0,
   onOpenCard,
   onAddCard,
+  onRename,
+  onDelete,
 }: {
   list: BoardList;
   boardKey: string;
+  /** Position on the board, so columns arrive one after another. */
+  index?: number;
   onOpenCard: (cardId: string) => void;
   /** Adds the card (the board shows it straight away) and resolves once
    * saved; rejects with a message if saving failed. */
   onAddCard: (listId: string, title: string) => Promise<void>;
+  onRename: (listId: string, title: string) => void;
+  /** Asks the board to confirm and delete this column. */
+  onDelete: (list: BoardList) => void;
 }) {
+  const [renaming, setRenaming] = useState(false);
   // The column itself is a drop target, so a card can land in an EMPTY column
   // (there's no card in it to drop "next to").
   const { setNodeRef, isOver } = useDroppable({ id: list.id, data: { type: "list" } });
@@ -51,18 +61,46 @@ export function Column({
 
   return (
     <section
-      className="flex w-[280px] shrink-0 flex-col bg-[#1a1a1c] p-1.5 transition-shadow"
-      style={{
-        borderRadius: "12px",
-        // A thin white line while a card is dragged over — inset, so the
-        // scrolling row can never clip it (an outline draws OUTSIDE the box).
-        boxShadow: isOver ? "inset 0 0 0 1px rgba(255,255,255,0.35)" : "none",
-        maxHeight: "calc(100vh - 150px)",
-      }}
+      className={`glass animate-in flex w-[288px] shrink-0 flex-col p-2 transition-[border-color] duration-150 ${
+        // A brighter edge while a card is dragged over.
+        isOver ? "!border-white/[0.32]" : ""
+      }`}
+      style={{ borderRadius: 14, maxHeight: "calc(100vh - 170px)", "--i": index } as React.CSSProperties}
     >
-      <header className="flex items-center gap-2 px-2.5 pt-2 pb-2.5">
-        <h2 className="text-[13px] font-semibold text-fg">{list.title}</h2>
-        <span className="text-[13px] text-faint">{list.cards.length}</span>
+      <header className="group/col flex min-h-[40px] items-center gap-2 pl-2.5 pr-1 pt-1 pb-1.5">
+        {/* Double-click the name, or use the menu, to rename. */}
+        <h2
+          className="min-w-0 truncate text-[13px] font-semibold text-fg"
+          onDoubleClick={() => setRenaming(true)}
+          title={renaming ? undefined : list.title}
+        >
+          <InlineEdit
+            value={list.title}
+            editing={renaming}
+            onDone={() => setRenaming(false)}
+            onSave={(t) => onRename(list.id, t)}
+            maxLength={60}
+            ariaLabel="Column name"
+            inputClassName="text-[13px] font-semibold"
+          />
+        </h2>
+        {!renaming && (
+          <span
+            className="flex h-[18px] min-w-[18px] items-center justify-center bg-white/[0.07] px-1.5 text-[11px] tabular-nums text-faint"
+            style={{ borderRadius: 999 }}
+          >
+            {list.cards.length}
+          </span>
+        )}
+        <ActionMenu
+          label={`Actions for ${list.title}`}
+          className="ml-auto opacity-0 transition-opacity focus-within:opacity-100 group-hover/col:opacity-100 max-md:opacity-100"
+          items={[
+            { label: "Rename", icon: <PencilSimple size={14} />, onSelect: () => setRenaming(true) },
+            { label: "Add task", icon: <Plus size={14} />, onSelect: () => setAdding(true) },
+            { label: "Delete column", icon: <Trash size={14} />, danger: true, onSelect: () => onDelete(list) },
+          ]}
+        />
       </header>
 
       <div ref={setNodeRef} className="flex min-h-[8px] flex-1 flex-col gap-1.5 overflow-y-auto">
@@ -83,8 +121,8 @@ export function Column({
       <div className={list.cards.length ? "pt-1.5" : ""}>
         {adding ? (
           <div
-            className="bg-[#262628] p-2.5 shadow-[inset_0_0_0_1px_rgba(125,180,255,0.7)]"
-            style={{ borderRadius: "8px" }}
+            className="animate-fade bg-white/[0.06] p-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
+            style={{ borderRadius: 10 }}
           >
             <textarea
               ref={box}
@@ -126,8 +164,8 @@ export function Column({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex h-8 w-full items-center gap-1.5 px-2.5 text-[13px] text-faint transition-colors hover:bg-white/[0.05] hover:text-fg"
-            style={{ borderRadius: "8px" }}
+            className="pressable flex h-9 w-full items-center gap-1.5 px-2.5 text-[13px] text-faint hover:bg-white/[0.05] hover:text-fg"
+            style={{ borderRadius: 10 }}
           >
             <Plus size={14} /> Create
           </button>

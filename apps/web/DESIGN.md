@@ -151,3 +151,7 @@ and visuals, 6 px for buttons. No drop shadows except on the product panel's win
 - "Free during beta", not "free forever": Vercel Hobby is non-commercial, and pricing isn't
   decided.
 - No customer logos, quotes or numbers until they exist.
+
+## Related
+
+- `DESIGN-FILM.md`: the slow, tilted product film planned for the hero in place of the product tabs.

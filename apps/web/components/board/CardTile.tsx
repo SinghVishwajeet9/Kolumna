@@ -36,18 +36,21 @@ export function CardTile({
       onClick={onOpen}
       // Lines are INSET shadows, not outlines: an outline draws outside the
       // box and the column's scroll area clips it.
-      className="group cursor-pointer bg-[#262628] outline-none focus-visible:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)] px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.25)] transition-[box-shadow,background-color] hover:bg-[#2b2b2e] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)]"
+      // Fades in only, and without a fill mode: dnd-kit owns this element's transform and its opacity while dragging.
+      className={`[animation:fadeIn_0.25s_ease] group cursor-pointer px-3 py-2.5 outline-none transition-[border-color,background-color] duration-150 hover:border-white/[0.18] hover:bg-white/[0.07] focus-visible:border-white/50 ${
+        overlay ? "border border-white/[0.3] bg-[#232326]" : "glass-raised"
+      }`}
       style={{
-        borderRadius: "8px",
+        borderRadius: 10,
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging && !overlay ? 0.35 : 1,
-        boxShadow: overlay
-          ? "inset 0 0 0 1px rgba(255,255,255,0.35), 0 16px 32px -10px rgba(0,0,0,0.8)"
-          : undefined,
+        // Lifted while it's being dragged.
+        boxShadow: overlay ? "0 18px 36px -12px rgba(0,0,0,0.85)" : undefined,
+        rotate: overlay ? "1.5deg" : undefined,
       }}
     >
-      <p className="text-[14px] leading-snug text-fg">{card.title}</p>
+      <p className="text-[13.5px] leading-snug text-fg">{card.title}</p>
       {card.epic && (
         <div className="mt-2 flex">
           <EpicChip epic={card.epic} />

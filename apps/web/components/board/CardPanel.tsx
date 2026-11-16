@@ -9,6 +9,9 @@ import { PRIORITIES } from "./types";
 import { PRIORITY_META, PriorityIcon } from "./Planning";
 import { ReviewItem } from "@/components/approvals/ReviewItem";
 import { refreshSidebar } from "@/components/Sidebar";
+import { PencilSimple, Trash, X } from "@phosphor-icons/react";
+import { ActionMenu, ConfirmDialog, InlineEdit } from "@/components/ui/Menu";
+import { useAuth } from "@/lib/auth-context";
 
 // Phase 4: below this stated confidence, agent changes to the card wait for
 // a human — whatever the agent's autonomy level.
@@ -77,6 +80,14 @@ export function CardPanel({
   const [epics, setEpics] = useState<Epic[]>([]);
   const [sprints, setSprints] = useState<SprintSummary[]>([]);
   const [newItem, setNewItem] = useState("");
+  // What is being edited in place: "title", a checklist step's id, or a note's id.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [deletingCard, setDeletingCard] = useState(false);
+  // Who is looking, so notes show the right actions: your own can be edited and
+  // deleted; an owner or admin can delete anyone's.
+  const { user } = useAuth();
+  const me = members.find((m) => m.type === "HUMAN" && m.email && m.email === user?.email);
+  const isAdmin = me?.role === "OWNER" || me?.role === "ADMIN";
 
   const load = useCallback(async () => {
     try {
@@ -160,9 +171,9 @@ export function CardPanel({
     });
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-[2px]" onClick={onClose}>
+    <div className="animate-fade fixed inset-0 z-50 flex justify-end bg-black/55 backdrop-blur-[3px]" onClick={onClose}>
       <aside
-        className="animate-rise flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-line bg-surface"
+        className="animate-panel flex h-full w-full max-w-[560px] flex-col overflow-y-auto border-l border-white/[0.08] bg-[#111112] shadow-[-24px_0_60px_-30px_rgba(0,0,0,0.9)]"
         onClick={(e) => e.stopPropagation()}
       >
         {!card ? (
@@ -174,20 +185,53 @@ export function CardPanel({
             <PageLoader />
           )
         ) : (
-          <div className="flex flex-col gap-8 p-7">
+          <div className="flex flex-col gap-8 p-5 sm:p-7">
             <header className="flex items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="mb-2 text-[14px] font-semibold text-fg" style={mono}>
                   <span className="text-muted">
                     {card.board.key}-{card.number}
                   </span>{" "}
                   · {card.list.title}
                 </p>
-                <h2 className="text-[22px] font-medium leading-snug text-fg">{card.title}</h2>
+                {/* Click the title to edit it. */}
+                <h2
+                  className={`text-[22px] font-medium leading-snug text-fg ${editing === "title" ? "" : "cursor-text hover:bg-white/[0.04]"}`}
+                  style={{ borderRadius: 6 }}
+                  onClick={() => setEditing("title")}
+                  title={editing === "title" ? undefined : "Click to edit"}
+                >
+                  <InlineEdit
+                    value={card.title}
+                    editing={editing === "title"}
+                    onDone={() => setEditing(null)}
+                    onSave={(title) => void patch({ title })}
+                    multiline
+                    maxLength={300}
+                    ariaLabel="Task title"
+                    inputClassName="text-[22px] font-medium leading-snug resize-none"
+                  />
+                </h2>
               </div>
-              <button type="button" onClick={onClose} className="text-[13px] text-faint hover:text-fg" style={mono}>
-                esc
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <ActionMenu
+                  label="Task actions"
+                  items={[
+                    { label: "Edit title", icon: <PencilSimple size={14} />, onSelect: () => setEditing("title") },
+                    { label: "Delete task", icon: <Trash size={14} />, danger: true, onSelect: () => setDeletingCard(true) },
+                  ]}
+                />
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  title="Close (Esc)"
+                  className="flex h-7 w-7 items-center justify-center text-faint transition-colors hover:bg-white/[0.08] hover:text-fg"
+                  style={{ borderRadius: 7 }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </header>
 
             {error && (
@@ -375,7 +419,7 @@ export function CardPanel({
               )}
               <ul className="space-y-2">
                 {card.checklistItems.map((item) => (
-                  <li key={item.id} className="flex items-start gap-3">
+                  <li key={item.id} className="group/item flex items-start gap-3">
                     <input
                       type="checkbox"
                       checked={item.done}
@@ -384,10 +428,17 @@ export function CardPanel({
                       }
                       className="mt-1 accent-[#e5e5e5]"
                     />
-                    <div className="min-w-0">
-                      <span className={`text-[14px] ${item.done ? "text-faint line-through" : "text-fg"}`}>
-                        {item.title}
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <InlineEdit
+                        value={item.title}
+                        editing={editing === item.id}
+                        onDone={() => setEditing(null)}
+                        onSave={(title) => void act(() => api.patch(`/checklist-items/${item.id}`, { title }))}
+                        maxLength={200}
+                        ariaLabel="Step"
+                        className={`text-[14px] ${item.done ? "text-faint line-through" : "text-fg"}`}
+                        inputClassName="text-[14px]"
+                      />
                       {item.evidenceUrl && (
                         <a
                           href={item.evidenceUrl}
@@ -400,6 +451,16 @@ export function CardPanel({
                         </a>
                       )}
                     </div>
+                    {editing !== item.id && (
+                      <span className="flex shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100 max-md:opacity-100">
+                        <RowButton label="Edit step" onClick={() => setEditing(item.id)}>
+                          <PencilSimple size={14} />
+                        </RowButton>
+                        <RowButton label="Delete step" onClick={() => void act(() => api.delete(`/checklist-items/${item.id}`))}>
+                          <Trash size={14} />
+                        </RowButton>
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -427,14 +488,37 @@ export function CardPanel({
               <SectionTitle>Notes</SectionTitle>
               <ul className="space-y-4">
                 {card.comments.map((c) => (
-                  <li key={c.id}>
-                    <div className="mb-1 flex items-center gap-2">
+                  <li key={c.id} className="group/note">
+                    <div className="mb-1 flex min-h-[28px] items-center gap-2">
                       <ActorBadge actor={c.author} size="md" />
                       <span className="text-[11px] text-faint" style={mono}>
                         {timeAgo(c.createdAt)}
+                        {c.editedAt && " · edited"}
                       </span>
+                      {(c.author.id === me?.actorId || isAdmin) && editing !== c.id && (
+                        <span className="ml-auto flex opacity-0 transition-opacity focus-within:opacity-100 group-hover/note:opacity-100 max-md:opacity-100">
+                          {c.author.id === me?.actorId && (
+                            <RowButton label="Edit note" onClick={() => setEditing(c.id)}>
+                              <PencilSimple size={14} />
+                            </RowButton>
+                          )}
+                          <RowButton label="Delete note" onClick={() => void act(() => api.delete(`/comments/${c.id}`))}>
+                            <Trash size={14} />
+                          </RowButton>
+                        </span>
+                      )}
                     </div>
-                    <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-muted">{c.body}</p>
+                    <InlineEdit
+                      value={c.body}
+                      editing={editing === c.id}
+                      onDone={() => setEditing(null)}
+                      onSave={(body) => void act(() => api.patch(`/comments/${c.id}`, { body }))}
+                      multiline
+                      maxLength={4000}
+                      ariaLabel="Note"
+                      className="block whitespace-pre-wrap text-[14px] leading-relaxed text-muted"
+                      inputClassName="text-[14px] leading-relaxed"
+                    />
                   </li>
                 ))}
               </ul>
@@ -480,6 +564,49 @@ export function CardPanel({
           </div>
         )}
       </aside>
+
+      {deletingCard && card && (
+        // Clicks here must not reach the backdrop behind, which closes the panel.
+        <div onClick={(e) => e.stopPropagation()}>
+          <ConfirmDialog
+            title="Delete this task?"
+            body={
+              <>
+                <span className="text-fg">{card.title}</span> and its checklist and notes will be deleted. This can&apos;t be
+                undone.
+              </>
+            }
+            confirmLabel="Delete task"
+            onClose={() => setDeletingCard(false)}
+            onConfirm={async () => {
+              try {
+                await api.delete(`/cards/${cardId}`);
+              } catch (err) {
+                throw new Error(err instanceof ApiError ? err.message : "Couldn't delete this task. Try again.");
+              }
+              onChanged();
+              refreshSidebar();
+              onClose();
+            }}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** A small icon button at the end of a checklist step or note. */
+function RowButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex h-6 w-6 items-center justify-center text-faint transition-colors hover:bg-white/[0.08] hover:text-fg"
+      style={{ borderRadius: 6 }}
+    >
+      {children}
+    </button>
   );
 }

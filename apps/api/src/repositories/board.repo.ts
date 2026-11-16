@@ -13,6 +13,8 @@ export async function listBoards(ctx: TenantContext) {
   return prisma.board.findMany({
     where: { workspaceId: ctx.workspaceId },
     orderBy: { createdAt: "asc" },
+    // For the boards page: how much is on each board.
+    include: { _count: { select: { cards: true, lists: true } } },
   });
 }
 
