@@ -48,12 +48,14 @@ export function PointsChip({ points }: { points: number | null }) {
 export function EpicChip({ epic }: { epic: EpicRef | null }) {
   if (!epic) return null;
   return (
+    // Linear-style label: a neutral outlined pill; the epic's colour is only the dot.
     <span
       title={`Epic: ${epic.title}`}
-      className="max-w-[140px] truncate px-1.5 py-[1px] text-[11px] leading-[16px]"
-      style={{ borderRadius: 4, color: epic.color, backgroundColor: `${epic.color}1f` }}
+      className="inline-flex h-[20px] max-w-[150px] items-center gap-1.5 text-[11.5px] text-[#d0d6e0]"
+      style={{ padding: "0 8px 0 7px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.09)" }}
     >
-      {epic.title}
+      <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ backgroundColor: epic.color }} />
+      <span className="truncate">{epic.title}</span>
     </span>
   );
 }

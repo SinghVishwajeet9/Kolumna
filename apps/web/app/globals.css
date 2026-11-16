@@ -312,3 +312,95 @@ html.lenis body {
   95% { transform: translate(calc(var(--uib-size) * 0.4)) scale(0.789472); opacity: 0.72; }
   100% { transform: translate(calc(var(--uib-size) * 0.5)) scale(0.73684); opacity: 0.65; }
 }
+
+/* ---------------------------------------------------------------------------
+   Landing page (see apps/web/DESIGN.md). Neutral greys; colour lives in the
+   product screens. Scoped to .landing so the app is unaffected. */
+.landing {
+  --l-bg: #0b0b0c;
+  --l-panel: #121214;
+  --l-line: rgba(255, 255, 255, 0.08);
+  --l-line-strong: rgba(255, 255, 255, 0.14);
+  --l-fg: #f4f4f5;
+  --l-muted: #a1a1aa;
+  --l-faint: #71717a;
+  --l-accent: #5af7b3;
+  background: var(--l-bg);
+  color: var(--l-fg);
+  /* Full-bleed hairlines are 100vw wide; clip the scrollbar's worth of overflow. */
+  overflow-x: clip;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Landing product tabs: the line under the active tab fills, then the next tab opens. */
+@keyframes tabProgress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+/* Browser autofill paints saved fields light blue with dark text. Keep them
+   dark like every other field: an inset shadow covers the autofill fill, and
+   the long transition stops the browser's own background from flashing in. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--color-fg);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface-2) inset;
+  box-shadow: 0 0 0 1000px var(--color-surface-2) inset;
+  caret-color: var(--color-fg);
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Isometric figures (components/landing/IsoFigures.tsx): parts slide while the
+   card is hovered, with a slow springy ease like linear.app's figures. */
+.iso-move {
+  transition: transform 0.7s cubic-bezier(0.32, 0.72, 0, 1) var(--delay, 0s);
+}
+.iso-card:hover .iso-move {
+  transform: var(--to);
+}
+@media (prefers-reduced-motion: reduce) {
+  .iso-move { transition: none; }
+}
+
+/* Stage reveal (components/landing/Stages.tsx): parts of a feature card animate
+   in once, when the card scrolls into view (data-in="true"). --d staggers them. */
+.reveal-bar {
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0s);
+}
+.reveal-pop {
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.35s ease var(--d, 0s), transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0s);
+}
+.reveal-fade {
+  opacity: 0;
+  translate: 0 4px;
+  transition: opacity 0.5s ease var(--d, 0s), translate 0.5s ease var(--d, 0s);
+}
+.reveal-draw {
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: left;
+  transition: transform 1.3s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s);
+}
+[data-in="true"] .reveal-bar,
+[data-in="true"] .reveal-pop,
+[data-in="true"] .reveal-draw {
+  transform: none;
+  opacity: 1;
+}
+[data-in="true"] .reveal-fade {
+  opacity: 1;
+  translate: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-bar, .reveal-pop, .reveal-fade, .reveal-draw { transition: none; }
+}

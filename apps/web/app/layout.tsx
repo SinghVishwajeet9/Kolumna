@@ -3,8 +3,9 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
-  title: "Kolumna — Structure for your team's chaos",
-  description: "A multi-tenant, AI-assisted project board.",
+  title: "Kolumna: let AI agents work on your board, safely",
+  description:
+    "Approvals, budgets and a full audit trail for Claude Code, Cursor and any MCP agent working on your team's board.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

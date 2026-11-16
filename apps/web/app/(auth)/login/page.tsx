@@ -8,8 +8,6 @@ import { useAuth } from "@/lib/auth-context";
 import { safeNext } from "@/lib/next-path";
 import { Logo } from "@/components/Logo";
 import { Field } from "@/components/ui/Field";
-import { CornerMarks } from "@/components/ui/CornerMarks";
-import { GooeyButton } from "@/components/marketing/GooeyButton";
 
 // useSearchParams needs a Suspense boundary for production builds.
 export default function LoginPage() {
@@ -59,27 +57,19 @@ function Form() {
   }
 
   return (
-    <div
-      className="animate-rise relative w-full max-w-[440px] border border-line bg-surface p-8 lg:p-10"
-      style={{
-        borderRadius: "16px",
-        boxShadow: "0 40px 90px -24px rgba(0,0,0,0.9)",
-      }}
-    >
-      <CornerMarks />
-
+    // No card: the form sits directly on the page (see the auth layout).
+    <div className="animate-rise w-full">
       <Link href="/" className="mb-9 inline-block text-fg">
         <Logo />
       </Link>
 
       <h1
-        className="mb-2 text-[clamp(1.9rem,4vw,2.5rem)] font-medium tracking-[-0.02em]"
-        style={{ fontFamily: "var(--font-mono)" }}
+        className="mb-2 text-[clamp(1.9rem,4vw,2.4rem)] font-medium tracking-[-0.02em] text-fg"
       >
         Sign in
       </h1>
       <p className="mb-8 text-[15px] leading-relaxed text-muted">
-        Welcome back — pick up right where you left off.
+        Welcome back. Pick up right where you left off.
       </p>
 
       {error && (
@@ -116,21 +106,21 @@ function Form() {
           required
         />
 
-        <GooeyButton
+        <button
           type="submit"
           disabled={submitting}
-          className="group mt-1 flex w-full items-center justify-center bg-[#ffffff] px-8 py-4 text-[17px] font-medium text-bg disabled:opacity-60"
-          style={{ borderRadius: "8px", fontFamily: "var(--font-mono)" }}
+          className="mt-1 flex h-11 w-full items-center justify-center bg-[#fafafa] text-[14px] font-medium text-[#09090b] transition-colors hover:bg-[#e4e4e7] disabled:opacity-60"
+          style={{ borderRadius: 8 }}
         >
           {submitting ? "Signing in…" : "Sign in"}
-        </GooeyButton>
+        </button>
       </form>
 
       <p className="mt-7 text-[14px] text-muted">
         New here?{" "}
         <Link
           href={params.toString() ? `/signup?${params.toString()}` : "/signup"}
-          className="text-accent transition-opacity hover:opacity-80"
+          className="text-fg underline underline-offset-4 decoration-white/30 hover:decoration-white"
         >
           Create an account
         </Link>

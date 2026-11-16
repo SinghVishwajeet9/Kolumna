@@ -52,10 +52,12 @@ export function ReviewItem({
   return (
     <li
       className={`border bg-surface ${compact ? "p-4" : "p-5"}`}
-      style={{ borderRadius: 12, borderColor: "rgba(252,211,77,0.35)" }}
+      // A neutral card; "waiting on you" is said by the small amber dot, not a tinted border.
+      style={{ borderRadius: 12, borderColor: "var(--color-line)" }}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-faint" style={mono}>
-        <Robot size={13} weight="fill" className="text-fg" />
+        <span className="h-[7px] w-[7px] rounded-full bg-[#e9b949]" title="Waiting for review" />
+        <Robot size={13} weight="fill" className="text-accent" />
         <span className="text-fg">{r.agent.displayName}</span>
         {r.card && !compact && (
           <span>

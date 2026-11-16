@@ -1,24 +1,26 @@
+import { Robot } from "@phosphor-icons/react";
 import type { ActorRef } from "./types";
 
-// Humans get an initials dot; agents get a filled accent chip marked "AI" —
-// the board must make it obvious at a glance whose hands a card is in.
+// Humans get an initials dot; agents get a chip with a robot mark, so it's
+// obvious at a glance whose hands a card is in. Chips follow Linear's rule:
+// the chip itself is neutral (faint fill, hairline border, grey text) and
+// colour lives only in the small icon.
 export function ActorBadge({ actor, size = "sm" }: { actor: ActorRef; size?: "sm" | "md" }) {
   const isAgent = actor.type === "AGENT";
-  const text = size === "sm" ? "text-[12px]" : "text-[13px]";
+  const text = size === "sm" ? "text-[12px]" : "text-[12.5px]";
   if (isAgent) {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2 py-0.5 ${text}`}
+        className={`inline-flex items-center gap-1.5 text-[#d0d6e0] ${size === "sm" ? "h-[22px]" : "h-6"} ${text}`}
         style={{
-          borderRadius: "6px",
-          backgroundColor: "rgba(90,247,179,0.12)",
-          border: "1px solid rgba(90,247,179,0.35)",
-          color: "#5af7b3",
-          fontFamily: "var(--font-mono)",
+          padding: "0 8px 0 6px",
+          borderRadius: 6,
+          backgroundColor: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.08)",
         }}
         title={`${actor.displayName} (AI agent)`}
       >
-        <span className="text-[10px] opacity-80">AI</span>
+        <Robot size={13} weight="fill" className="shrink-0 text-accent" aria-hidden="true" />
         {actor.displayName}
       </span>
     );

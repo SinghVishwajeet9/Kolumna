@@ -7,7 +7,6 @@ import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { switchWorkspace } from "@/lib/workspace";
 import { Logo } from "@/components/Logo";
-import { CornerMarks } from "@/components/ui/CornerMarks";
 import { PageLoader } from "@/components/ui/Loader";
 
 const mono = { fontFamily: "var(--font-mono)" };
@@ -22,8 +21,8 @@ type Invite = {
 
 const ENDED: Record<Exclude<Invite["state"], "PENDING">, string> = {
   ACCEPTED: "This invite has already been used.",
-  REVOKED: "This invite was withdrawn — ask for a new link.",
-  EXPIRED: "This invite has expired — invites last 7 days. Ask for a new link.",
+  REVOKED: "This invite was withdrawn. Ask for a new link.",
+  EXPIRED: "This invite has expired: invites last 7 days. Ask for a new link.",
 };
 
 // Where an invite link lands. Shows what you're joining before you sign in;
@@ -56,8 +55,8 @@ export default function InvitePage() {
   const mismatch = invite && user && user.email.toLowerCase() !== invite.email;
 
   return (
-    <div className="relative w-full max-w-[440px] border border-line bg-surface p-8" style={{ borderRadius: 18 }}>
-      <CornerMarks />
+    // No card: the content sits directly on the page (see the auth layout).
+    <div className="w-full">
       <Link href="/" className="mb-8 inline-block text-fg">
         <Logo />
       </Link>
@@ -93,7 +92,7 @@ export default function InvitePage() {
                   Create an account to join
                 </Link>
                 <Link href={`/login${q(invite.email)}`} className="text-center text-[13px] text-muted hover:text-fg">
-                  I already have an account — log in
+                  I already have an account. Log in
                 </Link>
               </div>
             ) : mismatch ? (

@@ -1,121 +1,45 @@
-import Image from "next/image";
-import { Nav } from "@/components/marketing/Nav";
-import { Hero } from "@/components/marketing/Hero";
-import { CrowdScene } from "@/components/marketing/CrowdScene";
-import { Steps } from "@/components/marketing/Steps";
-import { Breadth } from "@/components/marketing/Breadth";
-import { Features } from "@/components/marketing/Features";
-import { StatusBoard } from "@/components/marketing/StatusBoard";
-import { CTA } from "@/components/marketing/CTA";
-import { Footer } from "@/components/marketing/Footer";
-import { GooFilter } from "@/components/marketing/GooFilter";
-import { LoadingScreen } from "@/components/marketing/LoadingScreen";
-import { ScrollProgress } from "@/components/marketing/ScrollProgress";
-import { SmoothScroll } from "@/components/marketing/SmoothScroll";
+import { Nav } from "@/components/landing/Nav";
+import { Hero } from "@/components/landing/Hero";
+import { Footer } from "@/components/landing/Footer";
+import { Frame, Rule, Spacer } from "@/components/landing/Frame";
+import {
+  AuditSection,
+  CTA,
+  CrowdStrip,
+  HowItWorks,
+  SpendAndTrust,
+  Statement,
+  Teammates,
+  WorksWith,
+} from "@/components/landing/Sections";
 
-// Each framed section is its own bordered, OPAQUE block. The grid lives on
-// the framed region below (not the whole page), so it shows only in the
-// one-column side margins and in the gaps between blocks — never behind
-// content.
-function Block({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div className="border border-line bg-bg" style={style}>
-      {children}
-    </div>
-  );
-}
-
+// The landing page. Layout, type and spacing rules: apps/web/DESIGN.md.
+// One framed 1280px column; sections separated by hairlines and spacer strips.
 export default function LandingPage() {
   return (
-    // id="top" is the scroll target for the footer's logo tile.
-    <div id="top">
-      {/* Eased momentum scrolling (Lenis). Native scroll for reduced-motion. */}
-      <SmoothScroll />
-
-      {/* Custom green scroll-progress bar on the right edge (replaces the
-          native scrollbar). Rendered before LoadingScreen so it hides the
-          native scrollbar before the loader measures the hero. */}
-      <ScrollProgress />
-
-      {/* Intro overlay — sits above everything, measures the hero's "chaos"
-          and hands off to it. Client component; renders nothing after it
-          finishes (or immediately, for reduced-motion). */}
-      <LoadingScreen />
-
-      {/* Defines filter#goo, referenced by every gooey button on the page. */}
-      <GooFilter />
+    <div className="landing min-h-screen">
       <Nav />
-
-      <main>
-        {/* Full-bleed: no frame, no side margins, no grid around it. The
-            framed grid only begins at the sections below. */}
-        <Hero />
-
-        {/* Also full-bleed — the illustration needs the whole width. */}
-        <CrowdScene />
-
-        {/* Full-bleed too, immediately below the crowd — no gap, no
-            frame, no side margins. Its own internal padding handles the
-            content inset. */}
-        <Steps />
-
-        {/* Full-bleed like Steps — extends edge to edge, no frame, no grid
-            margins around it. Its own internal padding handles the inset. */}
-        <Breadth />
-
-        {/* grid-field lives HERE, not on the page root, so its rows are
-            anchored to the top of this region — the squares start clean and
-            complete right after the section above, instead of being sliced
-            wherever the page-height happened to land.
-            Side padding is calc(100%/16), matching the grid's background-size,
-            so each block's left AND right edge lands on a grid line. (A
-            percentage resolves against the containing block's width — the same
-            width the grid is painted across. Using 100vw here would drift by
-            the scrollbar width.) */}
-        <div className="grid-field flex flex-col gap-[var(--column-size)] px-6 pt-[var(--column-size)] lg:px-[calc(100%/16)]">
-          <Block>
-            <Features />
-          </Block>
-          {/* marginTop = the TOP-edge knob for this box: it's added to the
-              one-square gap above, so a positive value pushes the box's top
-              border down, a negative value pulls it up. The bottom edge is
-              StatusBoard's own paddingBottom. */}
-          <Block style={{ marginTop: "0px", borderColor: "#ffffff" }}>
-            <StatusBoard />
-          </Block>
-          <Block>
-            <CTA />
-          </Block>
-        </div>
-      </main>
-
-      {/* Halftone band — the same border.png slice used below the navbar —
-          as a divider above the footer. */}
-      <div
-        aria-hidden="true"
-        className="relative mt-[var(--column-size)] w-full overflow-hidden"
-        style={{ height: "56px" }}
-      >
-        <Image
-          src="/border.png"
-          alt=""
-          fill
-          sizes="100vw"
-          className="object-cover object-bottom"
-        />
-      </div>
-
-      {/* Full-bleed like the hero — the giant wordmark needs the whole
-          width, so no frame and no side margins here. */}
-      <div>
+      <Frame>
+        <main>
+          <Hero />
+          <Rule />
+          <WorksWith />
+          <CrowdStrip />
+          <Teammates />
+          <Spacer grain />
+          <HowItWorks />
+          <Spacer />
+          <SpendAndTrust />
+          <Spacer />
+          <AuditSection />
+          <Rule />
+          <Statement />
+          <Rule />
+          <CTA />
+        </main>
+        <Rule />
         <Footer />
-      </div>
+      </Frame>
     </div>
   );
 }
