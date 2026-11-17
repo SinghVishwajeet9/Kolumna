@@ -37,14 +37,35 @@ export function EdgeGrain({ reach = 16 }: { reach?: number }) {
 
 /** An empty strip between sections, bounded by hairlines: the page's rhythm.
  * `grain` adds faint edge grain; it's used on some strips, not all. */
-export function Spacer({ grain = false }: { grain?: boolean }) {
+export function Spacer({ grain = false, hatch = false }: { grain?: boolean; hatch?: boolean }) {
   return (
     <>
       <Rule />
       <div aria-hidden="true" className="relative h-12 md:h-16">
         {grain && <EdgeGrain />}
+        {hatch && <MarginHatch />}
       </div>
       <Rule />
+    </>
+  );
+}
+
+// Fine diagonal lines in the two margins outside the 1280px frame (screen
+// edge to frame line), on one spacer strip only. Nothing inside the frame.
+// 1px diagonal lines in exactly the frame lines' colour (--l-line, white at 8%).
+// Drawn as a repeating 8px SVG tile, not a CSS gradient: a gradient at 45°
+// lands each line on the pixel grid differently, so some came out lighter
+// than others. In a tile every line is the same pixels, so they all match.
+const HATCH_TILE = `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><path d='M-1 1l2-2M0 8l8-8M7 9l2-2' stroke='rgb(255,255,255)' stroke-opacity='0.08' stroke-width='1' shape-rendering='crispEdges'/></svg>`;
+const HATCH = `url("data:image/svg+xml,${encodeURIComponent(HATCH_TILE)}")`;
+
+function MarginHatch() {
+  // The strip is the frame's width; each margin is half of what's left of the screen.
+  const margin = "calc(50vw - 50%)";
+  return (
+    <>
+      <span className="pointer-events-none absolute inset-y-0" style={{ right: "100%", width: margin, backgroundImage: HATCH }} />
+      <span className="pointer-events-none absolute inset-y-0" style={{ left: "100%", width: margin, backgroundImage: HATCH }} />
     </>
   );
 }
@@ -135,17 +156,20 @@ export function ButtonLink({
   children,
   primary = false,
   large = false,
+  hero = false,
 }: {
   href: string;
   children: React.ReactNode;
   primary?: boolean;
   large?: boolean;
+  /** The hero's buttons: a size up from large, to balance the headline. */
+  hero?: boolean;
 }) {
-  const size = large ? "h-9 px-4 text-[14px]" : "h-8 px-3 text-[13px]";
+  const size = hero ? "h-10 px-5 text-[15px]" : large ? "h-9 px-4 text-[14px]" : "h-8 px-3 text-[13px]";
   const look = primary
     ? "bg-[#fafafa] text-[#09090b] hover:bg-[#e4e4e7]"
     : "border border-[var(--l-line-strong)] text-[var(--l-fg)] hover:bg-white/[0.05]";
-  const cls = `inline-flex items-center font-medium transition-colors ${size} ${look}`;
+  const cls = `inline-flex shrink-0 items-center whitespace-nowrap font-medium transition-colors ${size} ${look}`;
   const style = { borderRadius: 6 };
   return href.startsWith("#") ? (
     <a href={href} className={cls} style={style}>

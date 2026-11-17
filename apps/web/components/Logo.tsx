@@ -26,11 +26,12 @@ export function LogoMark({
   );
 }
 
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({ className = "", size = "md" }: { className?: string; size?: "md" | "lg" }) {
+  const lg = size === "lg";
   return (
-    <span className={`flex items-center gap-2.5 ${className}`}>
-      <LogoMark className="h-4 w-[26px]" />
-      <span className="text-[16px] font-semibold tracking-[0.14em]">KOLUMNA</span>
+    <span className={`flex items-center ${lg ? "gap-3" : "gap-2.5"} ${className}`}>
+      <LogoMark className={lg ? "h-5 w-[32px]" : "h-4 w-[26px]"} />
+      <span className={`${lg ? "text-[18px]" : "text-[16px]"} font-semibold tracking-[0.14em]`}>KOLUMNA</span>
     </span>
   );
 }

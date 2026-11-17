@@ -53,28 +53,29 @@ export function Footer() {
   return (
     <footer className="relative">
       <FooterDust />
-    <div className={`relative grid gap-10 pt-12 pb-20 md:grid-cols-[1.4fr_repeat(3,1fr)] md:pt-14 md:pb-24 ${pad}`}>
-      <div>
+    <div className={`relative grid grid-cols-3 gap-x-4 gap-y-8 pt-10 pb-16 md:grid-cols-[1.4fr_repeat(3,1fr)] md:gap-10 md:pt-14 md:pb-24 ${pad}`}>
+      {/* Phones: the brand spans the row above the three link columns. */}
+      <div className="col-span-3 md:col-span-1">
         <Logo className="text-[var(--l-fg)]" />
-        <p className="mt-4 max-w-[30ch] text-[14px] leading-[22px] text-[var(--l-faint)]">
+        <p className="mt-3 max-w-[30ch] text-[14px] leading-[22px] text-[var(--l-faint)] md:mt-4">
           Let AI agents work on your board, safely.
         </p>
       </div>
       {COLUMNS.map((col) => (
         <div key={col.title}>
-          <p className="mb-3 text-[13px] font-medium text-[var(--l-fg)]">{col.title}</p>
+          <p className="mb-1.5 text-[13px] font-medium text-[var(--l-fg)] md:mb-3">{col.title}</p>
           <ul className="flex flex-col">
             {col.links.map((l) => (
               <li key={l.label}>
                 {l.href.startsWith("/") ? (
-                  <Link href={l.href} className="inline-block py-2 text-[14px] text-[var(--l-muted)] hover:text-[var(--l-fg)]">
+                  <Link href={l.href} className="inline-block py-1.5 text-[14px] md:py-2 text-[var(--l-muted)] hover:text-[var(--l-fg)]">
                     {l.label}
                   </Link>
                 ) : (
                   <a
                     href={l.href}
                     {...(l.href.startsWith("http") ? { target: "_blank", rel: "noreferrer" } : {})}
-                    className="inline-block py-2 text-[14px] text-[var(--l-muted)] hover:text-[var(--l-fg)]"
+                    className="inline-block py-1.5 text-[14px] md:py-2 text-[var(--l-muted)] hover:text-[var(--l-fg)]"
                   >
                     {l.label}
                   </a>
@@ -84,7 +85,7 @@ export function Footer() {
           </ul>
         </div>
       ))}
-      <p className="text-[12px] text-[var(--l-faint)] md:col-span-4">© 2026 Kolumna · Beta</p>
+      <p className="col-span-3 text-[12px] text-[var(--l-faint)] md:col-span-4">© 2026 Kolumna · Beta</p>
     </div>
     </footer>
   );

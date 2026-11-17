@@ -9,12 +9,9 @@ import { ButtonLink, Cell, Cells, EdgeGrain, Panel, Rule, SectionHeader, Spacer,
 import { CrowdCanvas } from "./CrowdCanvas";
 import { AutonomyHairline, ConfidenceHairline, IdentityHairline } from "./HairlineFigures";
 import { RevealText } from "./RevealText";
-import { AgentShot, ApprovalShot, ColumnShot } from "./ConsoleShots";
-import {
-  BudgetStage,
-  BurndownStage,
-  TrackRecordStage,
-} from "./Stages";
+import { AgentScene, ApproveScene, PlanScene } from "./Scenes";
+// The spend-and-trust graphs: the earlier versions, which read better than the minimal ones in Scenes.tsx.
+import { BudgetStage, BurndownStage, TrackRecordStage } from "./Stages";
 
 
 // --- Works with ---------------------------------------------------------------
@@ -45,18 +42,20 @@ export function WorksWith() {
 }
 
 /** A strip of people walking across, framed by full-width hairlines. Decorative.
- * A huge "KOLUMNA" sits behind them, fading out downward, with the crowd
- * covering the lower part of the word. */
+ * A huge "KOLUMNA" sits behind them: most of the word shows, and the crowd's
+ * heads overlap only its lower part. People fade out at the left and right
+ * edges, so nobody is cut off at the frame. */
 export function CrowdStrip() {
+  const edges = "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)";
   return (
     <>
       <Rule />
-      <div aria-hidden="true" className="relative h-[200px] overflow-hidden md:h-[300px]">
+      <div aria-hidden="true" className="relative h-[230px] overflow-hidden md:h-[340px]">
         <span
-          className="pointer-events-none absolute inset-x-0 top-2 select-none text-center font-semibold uppercase leading-none tracking-[0.08em] md:top-3"
+          className="pointer-events-none absolute inset-x-0 top-3 select-none text-center font-semibold uppercase leading-none tracking-[0.08em] md:top-9"
           style={{
-            fontSize: "clamp(44px, 10vw, 128px)",
-            backgroundImage: "linear-gradient(to bottom, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.35) 45%, transparent 80%)",
+            fontSize: "clamp(60px, 10vw, 128px)",
+            backgroundImage: "linear-gradient(to bottom, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.42) 55%, rgba(255,255,255,0.12) 100%)",
             WebkitBackgroundClip: "text",
             backgroundClip: "text",
             color: "transparent",
@@ -64,8 +63,11 @@ export function CrowdStrip() {
         >
           Kolumna
         </span>
-        {/* brightness() greys the white fills but keeps them opaque, so the word stays hidden behind people. */}
-        <CrowdCanvas className="relative brightness-[0.75]" />
+        {/* brightness() greys the white fills but keeps them opaque, so the word stays hidden behind people.
+            The strip grew taller for the word; peepHeight keeps the people the size they were. */}
+        <div className="absolute inset-0" style={{ maskImage: edges, WebkitMaskImage: edges }}>
+          <CrowdCanvas className="relative brightness-[0.58]" peepHeight={0.7} density={0.62} />
+        </div>
       </div>
       <Rule />
     </>
@@ -76,7 +78,7 @@ export function CrowdStrip() {
 
 export function Teammates() {
   return (
-    <section id="features">
+    <section id="features" className="scroll-mt-16">
       <SectionHeader
         title={<RevealText text="Agents as teammates, not black boxes." className={h2Class} />}
         aside="Every agent joins your workspace as a member you can see, limit and switch off. It works through the same board your team does."
@@ -108,7 +110,7 @@ export function Teammates() {
 
 export function HowItWorks() {
   return (
-    <section id="how" className="scroll-mt-14">
+    <section id="how" className="scroll-mt-16">
       <SectionHeader
         title={<RevealText text="Plan it. Delegate it. Approve it." className={h2Class} />}
         aside="Three steps from an empty board to agents doing real work under your rules."
@@ -116,17 +118,17 @@ export function HowItWorks() {
       <div className="border-t border-[var(--l-line)]">
         <Cells>
           <Cell
-            visual={<ColumnShot />}
+            visual={<PlanScene />}
             title="1. Plan the work"
             body="Boards start with To Do, In Progress, In Review and Done. Type a task, press Enter, drag it along."
           />
           <Cell
-            visual={<AgentShot />}
+            visual={<AgentScene />}
             title="2. Bring your agents"
             body="Connect Claude Code, Cursor or any MCP client in one command. They see the board and pick up tickets."
           />
           <Cell
-            visual={<ApprovalShot />}
+            visual={<ApproveScene />}
             title="3. Approve what matters"
             body="Changes an agent isn't sure about wait in Approvals. Try it: approve or reject this one."
           />
@@ -174,11 +176,13 @@ const CHAIN = [
   { seq: 1042, text: "Claude Code moved ACM-17 to In Review", hash: "9f2c…a71e", prev: "4b80…12dd" },
   { seq: 1041, text: "Ana Ruiz approved a change from Claude Code", hash: "4b80…12dd", prev: "e317…0c5b" },
   { seq: 1040, text: "Cursor proposed raising ACM-21 to Urgent", hash: "e317…0c5b", prev: "71aa…d902" },
+  { seq: 1039, text: "Dana Park started Sprint 4", hash: "71aa…d902", prev: "0b9e…44f1" },
+  { seq: 1038, text: "Claude Code ticked “Draft copy” on ACM-14", hash: "0b9e…44f1", prev: "c5d2…7a30" },
 ];
 
 export function AuditSection() {
   return (
-    <section id="audit" className="grid scroll-mt-14 md:grid-cols-2">
+    <section id="audit" className="grid scroll-mt-16 md:grid-cols-2">
       <div className={`py-12 md:py-16 ${pad}`}>
         <RevealText text="Every action, on the record." className={h2Class} />
         <p className="mt-5 max-w-[46ch] text-[16px] leading-6 text-[var(--l-muted)]">
@@ -198,14 +202,44 @@ export function AuditSection() {
           ))}
         </ul>
       </div>
-      <div className="border-[var(--l-line)] p-3 max-md:border-t md:border-l md:p-8">
-        <Panel className="app-ui p-4">
+      {/* No line between the halves. The card is in Linear's style: a dark window
+          whose bottom (border and all) fades into the page, so the log reads as
+          running on rather than ending. */}
+      <div className="p-3 md:p-8">
+        <div
+          className="app-ui relative h-[380px] overflow-hidden p-4"
+          style={{
+            borderRadius: 12,
+            backgroundColor: "#0f1011",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxShadow: "0 2px 32px rgba(0,0,0,0.25)",
+            maskImage: "linear-gradient(to bottom, black 45%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 45%, transparent 100%)",
+          }}
+        >
           <div className="mb-3 flex items-center gap-1.5 text-[12px] text-[#d0d6e0]">
             <SealCheck size={14} weight="fill" className="text-accent" /> Chain verified
+            <span className="text-[#8a8f98]">· 1,042 entries</span>
+            {/* Window controls, as in an app window. Decoration only. */}
+            <span aria-hidden="true" className="ml-auto flex items-center gap-2.5 text-[#8a8f98] opacity-60">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 5h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M6 2h2v2M4 8H2V6M8 2 5.5 4.5M2 8l2.5-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="m2.5 2.5 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </span>
           </div>
           <ol className="flex flex-col gap-2">
             {CHAIN.map((e) => (
-              <li key={e.seq} className="border border-line bg-surface p-3" style={{ borderRadius: 8 }}>
+              <li
+                key={e.seq}
+                className="p-3"
+                style={{ borderRadius: 8, background: "linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04)), #0f1011", boxShadow: "0 0 0 1px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.05)" }}
+              >
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="text-faint">#{e.seq}</span>
                   <span className="text-fg">{e.text}</span>
@@ -217,7 +251,7 @@ export function AuditSection() {
               </li>
             ))}
           </ol>
-        </Panel>
+        </div>
       </div>
     </section>
   );

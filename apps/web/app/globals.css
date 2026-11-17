@@ -452,3 +452,364 @@ input:-webkit-autofill:active {
 @media (prefers-reduced-motion: reduce) {
   .animate-in, .animate-panel, .animate-fade, .animate-rise { animation: none; }
 }
+
+/* ── Product film (components/landing/film, design in DESIGN-FILM.md) ─────────
+   One shot = one plane. Its transform is the camera: it travels from --from to
+   --to (a clear direction per shot, eased in and out) while the plane fades
+   in, holds and fades out. All planes share the loop (4 shots × 7 s = 28 s) and
+   differ only by delay (--shot), so they stay in step. 3.93%, 25% and 28.93%
+   are 1.1 s, 7 s and 8.1 s of 28 s: each shot overlaps the next by 1.1 s. */
+@keyframes filmShot {
+  0% { opacity: 0; transform: var(--from); animation-timing-function: cubic-bezier(0.45, 0.05, 0.3, 1); }
+  3.93% { opacity: 1; }
+  25% { opacity: 1; }
+  28.93% { opacity: 0; transform: var(--to); }
+  100% { opacity: 0; transform: var(--to); }
+}
+.film-plane {
+  opacity: 0;
+  transform: var(--from);
+  will-change: transform, opacity;
+  animation: filmShot var(--film-loop, 28s) linear infinite backwards;
+  animation-delay: var(--shot, 0s);
+}
+
+/* Inside a shot, pieces arrive one at a time, slowly (1.1 s, 3.93% of the
+   loop), sliding in from the shot's --ex/--ey offset, the way the camera is
+   travelling. They stay until their plane has gone, then reset while unseen.
+   Opacity and a tiny translate only, on a scene drawn at full size, so nothing
+   is ever enlarged. */
+@keyframes filmEl {
+  0% { opacity: 0; transform: translate(var(--ex, 0px), var(--ey, 0px)); animation-timing-function: cubic-bezier(0.33, 0, 0.2, 1); }
+  3.93% { opacity: 1; transform: none; }
+  29% { opacity: 1; transform: none; }
+  29.5% { opacity: 0; transform: translate(var(--ex, 0px), var(--ey, 0px)); }
+  100% { opacity: 0; transform: translate(var(--ex, 0px), var(--ey, 0px)); }
+}
+.film-el {
+  animation: filmEl var(--film-loop, 28s) linear infinite backwards;
+  animation-delay: calc(var(--shot, 0s) + var(--d, 0s));
+}
+/* A row reveals itself left to right, word by word: a soft-edged mask slides
+   across it over 1.1 s (3.93% of the loop). The mask is 2.5x the row's width,
+   solid for its first 40% and clear after 60%; moving it from 100% to 0%
+   carries the soft edge from the row's left side to past its right. */
+@keyframes filmWipe {
+  0% { -webkit-mask-position: 100% 0; mask-position: 100% 0; animation-timing-function: cubic-bezier(0.4, 0, 0.25, 1); }
+  3.93% { -webkit-mask-position: 0% 0; mask-position: 0% 0; }
+  29% { -webkit-mask-position: 0% 0; mask-position: 0% 0; }
+  29.5% { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  100% { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+}
+.film-wipe {
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 40%, transparent 60%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 40%, transparent 60%, transparent 100%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0;
+  mask-position: 100% 0;
+  animation: filmWipe var(--film-loop, 28s) linear infinite backwards;
+  animation-delay: calc(var(--shot, 0s) + var(--d, 0s));
+}
+
+/* Bars fill from the left (progress, confidence). */
+@keyframes filmFill {
+  0% { transform: scaleX(0); animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  6% { transform: scaleX(1); }
+  29% { transform: scaleX(1); }
+  29.5% { transform: scaleX(0); }
+  100% { transform: scaleX(0); }
+}
+.film-fill {
+  transform-origin: left;
+  animation: filmFill var(--film-loop, 28s) linear infinite backwards;
+  animation-delay: calc(var(--shot, 0s) + var(--d, 0s));
+}
+
+.film-paused .film-plane,
+.film-paused .film-el,
+.film-paused .film-wipe,
+.film-paused .film-fill {
+  animation-play-state: paused;
+}
+/* Reduced motion: one still frame, same look, nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .film-plane { animation: none; transform: var(--to); }
+  .film-plane[data-still] { opacity: 1; }
+  .film-el, .film-fill { animation: none; }
+  .film-wipe { animation: none; -webkit-mask-image: none; mask-image: none; }
+}
+
+/* ── Landing cards (components/landing/Card.tsx, design in DESIGN-CARDS.md) ───
+   Surface measured from linear.app's agent cards: #0f1011, a 12% hairline,
+   radius 12, a soft 32px shadow. A second hairline (::after) shows only around
+   the pointer, or near the top-left corner when there is no pointer. */
+.lcard {
+  --mx: 0px;
+  --my: 0px;
+  background: #0f1011;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 2px 32px rgba(0, 0, 0, 0.25);
+  isolation: isolate;
+  transition: border-color 0.25s ease;
+}
+.lcard::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.35;
+  mask-image: radial-gradient(180px 140px at 0 0, black, transparent 70%);
+  -webkit-mask-image: radial-gradient(180px 140px at 0 0, black, transparent 70%);
+  transition: opacity 0.3s ease;
+}
+.lcard:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.lcard:hover::after {
+  opacity: 1;
+  mask-image: radial-gradient(220px 180px at var(--mx) var(--my), black, transparent 70%);
+  -webkit-mask-image: radial-gradient(220px 180px at var(--mx) var(--my), black, transparent 70%);
+}
+
+/* A scene plays once: each item fades up after its --d delay. */
+.lcard .lc-in {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms);
+}
+.lcard[data-played="true"] .lc-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* A status line swaps its text: the old one rises out, the new one rises in. */
+.lc-swap {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.lc-swap.lc-out {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.lc-swap.lc-under {
+  opacity: 0;
+  transform: translateY(6px);
+}
+/* "…" while waiting. */
+.lc-dots::after {
+  content: "…";
+  display: inline-block;
+  margin-left: 1px;
+  animation: lcDots 1.2s ease-in-out infinite;
+}
+@keyframes lcDots {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Graphs: bars grow from the floor, lines draw left to right, cells fade in. */
+.lc-bar {
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms);
+}
+.lc-draw {
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: left;
+  transition: transform 0.9s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0ms);
+}
+.lc-cell {
+  opacity: 0;
+  transition: opacity 0.3s ease var(--d, 0ms);
+}
+.lcard[data-played="true"] .lc-bar,
+.lcard[data-played="true"] .lc-draw {
+  transform: none;
+}
+.lcard[data-played="true"] .lc-cell {
+  opacity: var(--o, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lcard .lc-in, .lc-swap, .lc-bar, .lc-draw, .lc-cell { transition: none; }
+  .lc-dots::after { animation: none; }
+}
+
+/* Hero layout (components/landing/Hero.tsx, HeroSplit): the full screen width
+   in two halves, like linear.app's welcome screen. The text block sits in the
+   middle of the left half; the product film fills the right half; a hairline
+   divides them, fading out at the top and bottom. Kept here rather than as
+   Tailwind classes so it doesn't depend on the dev server picking up new
+   arbitrary classes. */
+.hero-section {
+  overflow-x: clip; /* never scroll sideways */
+}
+.hero-grid {
+  display: grid;
+  width: 100%;
+  align-items: center;
+}
+@media (min-width: 768px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: min(680px, calc(100vh - 64px));
+  }
+  .hero-text {
+    width: 100%;
+    max-width: 600px;
+    margin-inline: auto;
+    /* A little right of centre in the left half, toward the film. */
+    position: relative;
+    left: clamp(16px, 3vw, 56px);
+  }
+  .hero-film {
+    align-self: stretch;
+  }
+  .hero-divider {
+    position: absolute;
+    /* Shorter: only the middle of the hero, fading at both ends. */
+    top: 18%;
+    bottom: 18%;
+    left: 50%;
+    width: 1px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent 0%, var(--l-line) 30%, var(--l-line) 70%, transparent 100%);
+  }
+}
+@media (max-width: 767px) {
+  .hero-divider {
+    display: none;
+  }
+}
+/* Stacked hero: the film's band, edge to edge. Its height leaves room for the
+   headline above and the line and buttons below on a laptop screen. */
+@media (min-width: 768px) {
+  .hero-stack-film {
+    height: clamp(380px, 54vh, 560px);
+  }
+}
+
+/* FALLBACK film, v1 (components/landing/film/v1): constant-speed drift, no
+   arrivals. Unused unless ProductFilmV1 is rendered. */
+@keyframes filmShotV1 {
+  0% { opacity: 0; transform: var(--from); }
+  3.93% { opacity: 1; }
+  25% { opacity: 1; }
+  28.93% { opacity: 0; transform: var(--to); }
+  100% { opacity: 0; transform: var(--to); }
+}
+.film-plane-v1 {
+  opacity: 0;
+  transform: var(--from);
+  will-change: transform, opacity;
+  animation: filmShotV1 var(--film-loop, 28s) linear infinite backwards;
+}
+.film-paused .film-plane-v1 {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-plane-v1 { animation: none; transform: var(--to); }
+  .film-plane-v1[data-still] { opacity: 1; }
+}
+
+/* Linear-style card details (components/landing/Card.tsx). */
+/* "Thinking…" shimmers: a lighter band sweeps across the dim text. */
+.lc-shimmer {
+  background: linear-gradient(90deg, #62666d 0%, #62666d 35%, #c9cdd4 50%, #62666d 65%, #62666d 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: lcShimmer 1.8s linear infinite;
+}
+@keyframes lcShimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+/* The 3x3 working dots pulse in a diagonal wave. */
+.lc-dot {
+  opacity: 0.2;
+  animation: lcDot 1.2s ease-in-out infinite;
+}
+@keyframes lcDot {
+  0%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-shimmer { animation: none; color: #62666d; background: none; }
+  .lc-dot { animation: none; opacity: 0.6; }
+}
+
+/* The "panel" landing card (LandingCard variant="panel"): a textured property
+   sheet. A soft light falls from the top-left; the border is brightest at that
+   corner and fades away; fine grain sits over the surface; the content fades
+   out toward the bottom (the card's own mask). */
+.lcard.lcard-panel {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0) 100%) padding-box,
+    linear-gradient(#0e0f10, #0e0f10) padding-box,
+    linear-gradient(155deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 40%, rgba(255, 255, 255, 0.03) 100%) border-box;
+  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+}
+.lcard.lcard-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.lcard.lcard-panel:hover {
+  border-color: transparent;
+}
+/* The whole panel card (surface, border and all) fades out toward the bottom
+   and dissolves into the page, like linear.app's cards. */
+.lcard.lcard-panel {
+  -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+}
+
+/* Hero label (Hero.tsx): two fading crosses frame it. At the top-left a
+   horizontal and a vertical line cross just past the corner and fade along the
+   top and down the left; the bottom-right mirrors it. */
+.hero-tag-line {
+  position: absolute;
+  pointer-events: none;
+}
+.hero-tag-top {
+  top: 0;
+  left: -8px;
+  width: 78%;
+  height: 1px;
+  background: linear-gradient(to right, transparent 0, rgba(255, 255, 255, 0.5) 8px, rgba(255, 255, 255, 0.35) 40%, transparent 100%);
+}
+.hero-tag-left {
+  left: 0;
+  top: -8px;
+  width: 1px;
+  height: calc(100% + 4px);
+  background: linear-gradient(to bottom, transparent 0, rgba(255, 255, 255, 0.5) 8px, rgba(255, 255, 255, 0.25) 55%, transparent 100%);
+}
+.hero-tag-bottom {
+  bottom: 0;
+  right: -8px;
+  width: 78%;
+  height: 1px;
+  background: linear-gradient(to left, transparent 0, rgba(255, 255, 255, 0.5) 8px, rgba(255, 255, 255, 0.35) 40%, transparent 100%);
+}
+.hero-tag-right {
+  right: 0;
+  bottom: -8px;
+  width: 1px;
+  height: calc(100% + 4px);
+  background: linear-gradient(to top, transparent 0, rgba(255, 255, 255, 0.5) 8px, rgba(255, 255, 255, 0.25) 55%, transparent 100%);
+}

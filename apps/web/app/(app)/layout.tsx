@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
+
+// The signed-in app: never in search results, and links in it aren't followed.
+export const metadata: Metadata = {
+  title: "App",
+  robots: { index: false, follow: false },
+};
 
 // Chrome for the authenticated app (/boards, /b/[id], /agents, /activity):
 // a left sidebar and the page beside it. The marketing landing page renders

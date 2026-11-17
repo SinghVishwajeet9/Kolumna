@@ -31,6 +31,7 @@ export function CrowdCanvas({
   rows = 15,
   cols = 7,
   peepHeight = 0.8,
+  density = 1,
   className = "",
 }: {
   src?: string;
@@ -38,6 +39,8 @@ export function CrowdCanvas({
   cols?: number;
   /** Tallest person as a fraction of the strip height. */
   peepHeight?: number;
+  /** Share of the sprite sheet's people on screen at once, 0 to 1. Lower leaves gaps between walkers. */
+  density?: number;
   className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,7 +129,10 @@ export function CrowdCanvas({
       crowd.length = 0;
       available.length = 0;
       available.push(...allPeeps);
-      while (available.length) addPeep().walk?.progress(Math.random());
+      // Only some of the people walk at once. The rest wait their turn: when one
+      // leaves, addPeep() picks the next at random, so the count stays the same.
+      const count = Math.max(1, Math.round(allPeeps.length * Math.min(1, Math.max(0, density))));
+      for (let i = 0; i < count && available.length; i++) addPeep().walk?.progress(Math.random());
       render();
     };
 
@@ -174,7 +180,7 @@ export function CrowdCanvas({
       gsap.ticker.remove(render);
       for (const p of crowd) p.walk?.kill();
     };
-  }, [src, rows, cols, peepHeight]);
+  }, [src, rows, cols, peepHeight, density]);
 
   return <canvas ref={canvasRef} aria-hidden="true" className={`block h-full w-full ${className}`} />;
 }

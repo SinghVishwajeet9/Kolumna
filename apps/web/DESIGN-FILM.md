@@ -3,7 +3,8 @@
 A slow, dim, tilted close-up of the product that plays on a loop, in place of the
 dashboard panels on the landing page. Companion to `DESIGN.md` (the landing page system).
 
-Status: **design only, nothing built yet.** Written 2026-11-16.
+Status: **built 2026-11-17** in the landing hero (`components/landing/film/`). Written
+2026-11-16. What differs from the plan is listed under "As built" at the end.
 
 ## What we are copying, and what we are not
 
@@ -239,3 +240,62 @@ features and are a separate decision.
 3. **How dark?** The reference is very dark because it sits beside a form. As the main
    visual of a hero it may need to be a step brighter (text at 0.3, not 0.22). To be
    decided on screen.
+
+## As built (2026-11-17)
+
+- **Timeline:** CSS keyframes (`filmShot` in `globals.css`), not the Web Animations API.
+  One plane per shot; all share the 28 s loop and differ by delay.
+- **Camera easing:** linear, not the curve in the table. Constant speed is what makes a
+  shot look already moving when it arrives and still moving when it leaves.
+- **Brightness:** a step up from the reference, as question 3 expected. Text 0.3, subject
+  0.62, the Approve button 0.4.
+- **Grain:** none. Removed at the user's request; the vignette alone finishes the frame.
+- **Placement (changed 2026-11-17):** the film is the **right half of the hero**, beside
+  the headline. There is no line between the halves: the film fades out at its own
+  edges, and a hairline across that soft edge showed as a broken segment. Full width
+  under the headline had put the film below the fold, alone. The stage now takes
+  whatever shape that half has, about square on a laptop.
+- **Backdrop:** the grainy crescent (`HeroBackdrop.tsx`, `public/hero-glow.webp`) is back
+  as lighting behind the text only: about a third of its brightness, placed behind and
+  above the headline, and masked to nothing toward the film and the bottom.
+- **Framing:** tightens only until the subject's words would no longer fit
+  (scale = width / 960). Shots 2 and 3 were moved right so their subjects are centred.
+- **Phones:** the film is a 4:5 block under the text.
+- **The tabs:** `ProductTabs.tsx` is no longer used by the hero. The file is still in
+  the repo, unused, pending question 2.
+
+Checked in the browser at 1440 px and 375 px by stepping the timeline to the middle of
+each shot: one subject in the sharp band every time, no sideways scroll, and the film
+pauses when scrolled away and resumes when it returns. **Not checked:** the motion itself
+(the browser pane was hidden, so only still frames were seen), frame rate on a weak
+laptop, and reduced motion in a real browser.
+- **Full width (2026-11-17):** the hero now sits outside the framed 1280 px column, with no
+  frame lines beside it. The text stays aligned with the column; the film fills from the
+  middle of the screen to its right edge. The frame lines start under the hero. On
+  phones a second copy of the film renders under the text; the hidden copy never comes
+  into view, so it stays paused.
+- **Camera travel and arrivals (2026-11-17):** each shot now travels in one clear
+  direction, eased in and out: down the sidebar, up the board column, left to right
+  across the approval, diagonally along the audit chain. Inside each shot the pieces
+  arrive one at a time (fade and rise, about 0.25 s apart); the progress and confidence
+  bars fill from the left. All on the same 28 s loop as the planes (`filmEl` and
+  `filmFill` in `globals.css`), so nothing drifts out of step.
+- **Revised the same day:** back to the first version's slow pace (about 60 px of travel
+  per 7 s shot), still one direction per shot. Arrivals are spread over the whole shot
+  (about 0.7 s apart, each fading in over 1.1 s from the direction the camera travels),
+  so they keep pace with the camera instead of all landing in the first two seconds.
+- **Blur and pixelation fixed:** scenes were drawn small and enlarged 3x with `scale()`,
+  and once their pieces animated, the browser stretched a small image of each. Scenes
+  now use `zoom: 3`, so they are laid out and drawn at full size, and the camera's scale
+  is about 1.
+- **Fallback:** the first version is kept unchanged in `components/landing/film/v1/`
+  (`ProductFilmV1`, keyframes `filmShotV1`). To go back, render `<ProductFilmV1 />` in
+  place of `<ProductFilm />` in `Hero.tsx`.
+- **Richer scenes (2026-11-17):** every shot is now a dense slice of the real app with mock
+  data, so the camera never frames empty space: the board (In Progress and In Review,
+  with keys, labels, priorities, points, checklists, avatars), the full sidebar (with
+  boards and counts), an approval with its status change, task, confidence against the
+  threshold and the next approval waiting, and the audit log (entry numbers, actors,
+  hashes, a dashed chain with diamond markers). Most of each scene is simply there,
+  blurred by the depth of field; only two or three things arrive per shot. A step darker
+  overall (text at 26% white, the subject at 52%). The board now opens the film.

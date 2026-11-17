@@ -14,21 +14,23 @@ import {
 } from "@/components/landing/Sections";
 
 // The landing page. Layout, type and spacing rules: apps/web/DESIGN.md.
-// One framed 1280px column; sections separated by hairlines and spacer strips.
+// A full-width hero, then one framed 1280px column; sections separated by
+// hairlines and spacer strips.
 export default function LandingPage() {
   return (
     <div className="landing min-h-screen">
       <Nav />
-      <Frame>
-        <main>
-          <Hero />
+      <main>
+        {/* Full width: no frame lines beside the hero. The frame starts under it. */}
+        <Hero />
+        <Frame>
           <Rule />
           <WorksWith />
           <CrowdStrip />
           <Teammates />
           <Spacer grain />
           <HowItWorks />
-          <Spacer />
+          <Spacer hatch />
           <SpendAndTrust />
           <Spacer />
           <AuditSection />
@@ -36,10 +38,10 @@ export default function LandingPage() {
           <Statement />
           <Rule />
           <CTA />
-        </main>
-        <Rule />
-        <Footer />
-      </Frame>
+          <Rule />
+          <Footer />
+        </Frame>
+      </main>
     </div>
   );
 }

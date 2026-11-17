@@ -76,7 +76,15 @@ export function AmbientBackground({
 export function AmbientPicker({ className = "" }: { className?: string }) {
   const choice = useChoice();
   const [open, setOpen] = useState(false);
+  // Which side the menu opens to: under the button's right edge, unless that
+  // would push it off the left of the screen (phones), then its left edge.
+  const [alignLeft, setAlignLeft] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const toggle = () => {
+    const r = root.current?.getBoundingClientRect();
+    if (r) setAlignLeft(r.right < 200);
+    setOpen((o) => !o);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -104,7 +112,7 @@ export function AmbientPicker({ className = "" }: { className?: string }) {
     <div ref={root} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
         title="Change or turn off the background animation"
@@ -127,7 +135,7 @@ export function AmbientPicker({ className = "" }: { className?: string }) {
         <ul
           role="menu"
           aria-label="Background animation"
-          className="animate-in absolute right-0 top-[calc(100%+6px)] z-30 min-w-[180px] bg-[#1c1c1e] p-1 shadow-[inset_0_0_0_1px_var(--color-line),0_16px_40px_-12px_rgba(0,0,0,0.9)]"
+          className={`animate-in absolute top-[calc(100%+6px)] z-30 min-w-[180px] ${alignLeft ? "left-0" : "right-0"} bg-[#1c1c1e] p-1 shadow-[inset_0_0_0_1px_var(--color-line),0_16px_40px_-12px_rgba(0,0,0,0.9)]`}
           style={{ borderRadius: 10 }}
         >
           {ANIMAL_KEYS.map((k) => (
